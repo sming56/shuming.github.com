@@ -84,16 +84,16 @@ https://blog.csdn.net/21cnbao/article/details/112455742
 碎片整理有可能要消耗大量CPU
 
 7) Huge memory对内存回收和碎片整理算法影响
-MEMCG memory protection原理
-memory.min
+8) MEMCG memory protection原理
+* memory.min
 
-mem_cgroup_protected（）函数
+* mem_cgroup_protected（）函数
 
-可以用来保护容器内存
+* 可以用来保护容器内存
 
-8) 容器swap大小为什么可以突破2G限制
-全局内存回收随机选择容器anon page  swap out
-9) Anon Page Fault页是先放入inactive list还是active list？File Page cache是先放入inactive list还是active list?
+9) 容器swap大小为什么可以突破2G限制
+10) 全局内存回收随机选择容器anon page  swap out
+11) Anon Page Fault页是先放入inactive list还是active list？File Page cache是先放入inactive list还是active list?
 代码块
 workingset.c
  /*
@@ -117,10 +117,14 @@ workingset.c
  37  *
  38  *
  39  *>----->-------Access frequency and refault distance
-10) Mem.free还有富余，为什么会OOM?
-第一种可能性是宿主机没有内存了，
+12) Mem.free还有富余，为什么会OOM?
+* 可能性是宿主机没有内存了，__alloc_pages_slowpath（）最终是从系统的ZONE memory上分配得，如果系统ZONE内存不够了就会OOM。
 
-11) LRU list上得page reference 为什么要用物理页来查询而不是虚拟页？
+* 容器中的进程page falut:handle_mm_fault()-->--->__alloc_pages_slowpath()--->out_of_memory（）
+
+* 可能性是容器page cache分配失败，pagecache_get_page()---->_page_cache_alloc()--->__alloc_pages_node()--->__alloc_pages()--->__alloc_pages_nodemask()--->__alloc_pages_slowpath()
+
+13) LRU list上得page reference 为什么要用物理页来查询而不是虚拟页？
 x86机器原理上，page reference是在pte上，对应得是虚拟地址。从代码上看，用物理页page反查所有mapping好得虚拟地址，只要有referenced就算page reference。
 
 代码块
