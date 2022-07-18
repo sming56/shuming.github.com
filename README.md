@@ -11,6 +11,7 @@ https://blog.csdn.net/21cnbao/article/details/112455742
 
 容器内存回收触发全局内存回收
 代码块
+··
 3770 #ifdef CONFIG_MEMCG
 3771 /*
 3772  * Per cgroup background reclaim.
@@ -73,6 +74,7 @@ https://blog.csdn.net/21cnbao/article/details/112455742
 3834
 3835 >------->-------if (total_scanned && sc.priority < DEF_PRIORITY - 2)
 3836 >------->------->-------congestion_wait(WRITE, HZ/10);
+··
 ## 4) memcg共享ZONE内存管理带来得隔离性问题
 一个memcg缺内存导致在某个zone上直接内存回收，可能回收这个zone上其他memcg内存：__alloc_pages_direct_reclaim()
 
@@ -96,6 +98,7 @@ https://blog.csdn.net/21cnbao/article/details/112455742
 ## 11) Anon Page Fault页是先放入inactive list还是active list？File Page cache是先放入inactive list还是active list?
 代码块
 workingset.c
+··
  /*
  20  *>----->-------Double CLOCK lists
  21  *
@@ -117,6 +120,7 @@ workingset.c
  37  *
  38  *
  39  *>----->-------Access frequency and refault distance
+ ··
 ## 12) Mem.free还有富余，为什么会OOM?
 * 可能性是宿主机没有内存了，__alloc_pages_slowpath（）最终是从系统的ZONE memory上分配得，如果系统ZONE内存不够了就会OOM。
 
@@ -128,6 +132,7 @@ workingset.c
 x86机器原理上，page reference是在pte上，对应得是虚拟地址。从代码上看，用物理页page反查所有mapping好得虚拟地址，只要有referenced就算page reference。
 
 代码块
+··
 826 /**
  827  * page_referenced - test if the page was referenced
  828  * @page: the page to test
@@ -184,6 +189,7 @@ x86机器原理上，page reference是在pte上，对应得是虚拟地址。从
  879
  880 >-------return pra.referenced;
  881 }
+ ··
 ## 12) Memcg的page cache算不算在总内存限制里
 代码块
 ​
