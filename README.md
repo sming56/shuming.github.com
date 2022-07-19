@@ -300,10 +300,10 @@ x86机器原理上，page reference是在pte上，对应得是虚拟地址。从
  
  ## 15） 当容器内存达到上线后，再分配内存是不是会导致OOM
  ### 第一种情况page cache需要分配新内存，宿主机有空闲内存，但是容器内存上限到了，可能导致死循环
- vfs_read()--->__vfs_read()--->ext4_file_read_iter()--->generic_file_read_iter()--->generic_file_buffered_read()--->generic_file_buffered_read()--->page_cache_sync_readahead()--->force_page_cache_readahead()--->__do_page_cache_readahead()---->__page_cache_alloc()
-143 
-generic_file_buffered_read()
 
+vfs_read()--->__vfs_read()--->ext4_file_read_iter()--->generic_file_read_iter()--->generic_file_buffered_read()--->generic_file_buffered_read()--->page_cache_sync_readahead()--->force_page_cache_readahead()--->__do_page_cache_readahead()---->__page_cache_alloc()
+
+generic_file_buffered_read()
 
  /**
 2097  * generic_file_buffered_read - generic file read routine
@@ -652,7 +652,7 @@ try_charge() {
  ### 第二种情况page fault handler中
  有一种情况是try_charge()时超了内存上线，但是try_charge(）只是标记一下OOM了和在进程mm上标记具体memcg，然后page fault的时候调mem_cgroup_out_of_memory（）
 
-第一种case ext4 文件系统，filemap
+#### 第一种case ext4 文件系统，filemap
 
 [20148497.767284] java invoked oom-killer: gfp_mask=0x6200ca(GFP_HIGHUSER_MOVABLE), nodemask=(null), order=0, oom_score_adj=916
 [20148497.768021] java cpuset=docker-083afd1a06b8b612ab5d974e12200d7fd1d35be6a44f0e368179399ef6c6e84d.scope mems_allowed=0-3
@@ -697,7 +697,7 @@ try_charge() {
 [20148497.993482] oom_reaper: reaped process 7093 (java), now anon-rss:0kB, file-rss:0kB, shmem-rss:0kB
 
 
-第二种case shmem
+#### 第二种case shmem
 
 [20148402.291616] java invoked oom-killer: gfp_mask=0x6200ca(GFP_HIGHUSER_MOVABLE), nodemask=(null), order=0, oom_score_adj=916
 [20148402.292342] java cpuset=docker-083afd1a06b8b612ab5d974e12200d7fd1d35be6a44f0e368179399ef6c6e84d.scope mems_allowed=0-3
@@ -738,7 +738,7 @@ try_charge() {
 [20148402.322046] Memory cgroup stats for /kubepods.slice/kubepods-burstable.slice/kubepods-burstable-podd63c4bbe_5f18_11ec_bdcd_d094668d7dd6.slice/docker-083afd1a06b8b612ab5d974e12200d7fd1d35be6a44f0e368179399ef6c6e84d.scope: cache:27747820KB rss:4233580KB rss_huge:0KB shmem:27731164KB mapped_file:11880KB dirty:0KB writeback:1716KB swap:3190836KB inactive_anon:11311424KB active_anon:20656120KB inactive_file:10400KB active_file:4324KB unevictable:0KB
 [20148402.325486] Memory cgroup out of memory: Killed process 321688 (java) total-vm:10247356kB, anon-rss:2740520kB, file-rss:0kB, shmem-rss:0kB
 
-第三种case anon memory
+#### 第三种case anon memory
 
 [20219668.716979] java invoked oom-killer: gfp_mask=0x6000c0(GFP_KERNEL), nodemask=(null), order=0, oom_score_adj=916
 [20219668.717885] java cpuset=docker-083afd1a06b8b612ab5d974e12200d7fd1d35be6a44f0e368179399ef6c6e84d.scope mems_allowed=0-3
@@ -993,6 +993,7 @@ do_page_fault()--->__do_fault()--->ext4_filemap_fault()--->filemap_fault()--->ad
 1432 }
 
 ## 共享内存到底算page cache还是anon memory，共享内存(share memory)对memcg如何计数
+
 1611 /*
 1612  * shmem_getpage_gfp - find page in cache, or get from swap, or allocate
 1613  *
