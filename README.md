@@ -6,7 +6,7 @@
 ## 2) LRU_ACTIVE和LRU_INACTIVE list大小平衡算法
 inactive_list_is_low()
 4.18内核在inactive 和 active page(无论是file lru 还是anon lru), 比例严重失调时回导致系统回收anon page，也就是会swap，尽管当时file lru还有大量的内存页。
-``
+```
 2204 /*
 2205  * The inactive anon list should be small enough that the VM never has
 2206  * to do too much work.
@@ -63,7 +63,7 @@ inactive_list_is_low()
 2628 >------->-------shrink_active_list(SWAP_CLUSTER_MAX, lruvec,
 2629 >------->------->------->-------   sc, LRU_ACTIVE_ANON); 《---回收anon lru，导致swap
 2630 }
-``
+```
 
 
 inactive_list_is_low()
@@ -73,7 +73,8 @@ https://blog.csdn.net/21cnbao/article/details/112455742
 
 容器内存回收触发全局内存回收
 代码块
-``
+
+```
 3770 #ifdef CONFIG_MEMCG
 3771 /*
 3772  * Per cgroup background reclaim.
@@ -136,7 +137,7 @@ https://blog.csdn.net/21cnbao/article/details/112455742
 3834
 3835 >------->-------if (total_scanned && sc.priority < DEF_PRIORITY - 2)
 3836 >------->------->-------congestion_wait(WRITE, HZ/10);
-``
+```
 ## 4) memcg共享ZONE内存管理带来得隔离性问题
 一个memcg缺内存导致在某个zone上直接内存回收，可能回收这个zone上其他memcg内存：__alloc_pages_direct_reclaim()
 
@@ -160,7 +161,7 @@ https://blog.csdn.net/21cnbao/article/details/112455742
 ## 11) Anon Page Fault页是先放入inactive list还是active list？File Page cache是先放入inactive list还是active list?
 代码块
 workingset.c
-``
+```
  /*
  20  *>----->-------Double CLOCK lists
  21  *
@@ -182,7 +183,7 @@ workingset.c
  37  *
  38  *
  39  *>----->-------Access frequency and refault distance
- ``
+ ```
 ## 12) Mem.free还有富余，为什么会OOM?
 * 可能性是宿主机没有内存了，__alloc_pages_slowpath（）最终是从系统的ZONE memory上分配得，如果系统ZONE内存不够了就会OOM。
 
@@ -194,7 +195,7 @@ workingset.c
 x86机器原理上，page reference是在pte上，对应得是虚拟地址。从代码上看，用物理页page反查所有mapping好得虚拟地址，只要有referenced就算page reference。
 
 代码块
-``
+```
 826 /**
  827  * page_referenced - test if the page was referenced
  828  * @page: the page to test
@@ -251,11 +252,12 @@ x86机器原理上，page reference是在pte上，对应得是虚拟地址。从
  879
  880 >-------return pra.referenced;
  881 }
- ``
+ ```
 ## 14) Memcg的page cache算不算在总内存限制里
 代码块
 结论是算在总内存限制中
 3.10内核代码
+```
  612 static int __add_to_page_cache_locked(struct page *page,
  613 >------->------->------->-------      struct address_space *mapping,
  614 >------->------->------->-------      pgoff_t offset, gfp_t gfp_mask,
@@ -289,7 +291,9 @@ x86机器原理上，page reference是在pte上，对应得是虚拟地址。从
  651 out:
  652 >-------return error;
  653 }
+ ```
  4.18内核
+ ```
   826 static int __add_to_page_cache_locked(struct page *page,
  827 >------->------->------->-------      struct address_space *mapping,
  828 >------->------->------->-------      pgoff_t offset, gfp_t gfp_mask,
@@ -326,14 +330,14 @@ x86机器原理上，page reference是在pte上，对应得是虚拟地址。从
  876 >-------put_page(page);
  877 >-------return error;
  878 }
- 
+ ```
  ## 15） 当容器内存达到上线后，再分配内存是不是会导致OOM
  ### 第一种情况page cache需要分配新内存，宿主机有空闲内存，但是容器内存上限到了，可能导致死循环
 
 vfs_read()--->__vfs_read()--->ext4_file_read_iter()--->generic_file_read_iter()--->generic_file_buffered_read()--->generic_file_buffered_read()--->page_cache_sync_readahead()--->force_page_cache_readahead()--->__do_page_cache_readahead()---->__page_cache_alloc()
 
 generic_file_buffered_read()
-
+```
  /**
 2097  * generic_file_buffered_read - generic file read routine
 2098  * @iocb:>------the iocb to read
@@ -418,6 +422,8 @@ try_charge() {
 2045 
 。。。
 }
+```
+```
 -----》
 2338 >------->-------if (error) {
 2339 >------->------->-------put_page(page);
@@ -513,7 +519,8 @@ try_charge() {
 213 out:
 214 >-------return nr_pages;
 215 }
-
+```
+```
 写路径
 block_write_begin()--->grab_cache_page_write_begin()--->pagecache_get_page()
 1591* If there is a page cache page, it is returned with an increased refcount.
@@ -593,8 +600,10 @@ try_charge() {
 1654 
 1655 >-------return page;
 1656 }
+```
 5.18内核
 839 
+```
  840 noinline int __filemap_add_folio(struct address_space *mapping,
  841 >------->-------struct folio *folio, pgoff_t index, gfp_t gfp, void **shadowp)
  842 {
@@ -677,12 +686,12 @@ try_charge() {
  919 >-------return error;
  920 }
  921 ALLOW_ERROR_INJECTION(__filemap_add_folio, ERRNO);
- 
+ ```
  ### 第二种情况page fault handler中
  有一种情况是try_charge()时超了内存上线，但是try_charge(）只是标记一下OOM了和在进程mm上标记具体memcg，然后page fault的时候调mem_cgroup_out_of_memory（）
 
 #### 第一种case ext4 文件系统，filemap
-
+```
 [20148497.767284] java invoked oom-killer: gfp_mask=0x6200ca(GFP_HIGHUSER_MOVABLE), nodemask=(null), order=0, oom_score_adj=916
 [20148497.768021] java cpuset=docker-083afd1a06b8b612ab5d974e12200d7fd1d35be6a44f0e368179399ef6c6e84d.scope mems_allowed=0-3
 [20148497.768802] CPU: 18 PID: 7127 Comm: java Kdump: loaded Tainted: G        W  O  K  --------- -  - 4.18.0-147.mt20200626.413.el8_1.x86_64 #1
@@ -724,10 +733,10 @@ try_charge() {
 [20148497.797405] Memory cgroup stats for /kubepods.slice/kubepods-burstable.slice/kubepods-burstable-podd63c4bbe_5f18_11ec_bdcd_d094668d7dd6.slice/docker-083afd1a06b8b612ab5d974e12200d7fd1d35be6a44f0e368179399ef6c6e84d.scope: cache:28030012KB rss:3958288KB rss_huge:0KB shmem:28013264KB mapped_file:25212KB dirty:0KB writeback:1716KB swap:3190836KB inactive_anon:11333716KB active_anon:20641940KB inactive_file:7596KB active_file:468KB unevictable:0KB
 [20148497.800391] Memory cgroup out of memory: Killed process 7093 (java) total-vm:11451920kB, anon-rss:1968776kB, file-rss:0kB, shmem-rss:16356kB
 [20148497.993482] oom_reaper: reaped process 7093 (java), now anon-rss:0kB, file-rss:0kB, shmem-rss:0kB
-
+```
 
 #### 第二种case shmem
-
+```
 [20148402.291616] java invoked oom-killer: gfp_mask=0x6200ca(GFP_HIGHUSER_MOVABLE), nodemask=(null), order=0, oom_score_adj=916
 [20148402.292342] java cpuset=docker-083afd1a06b8b612ab5d974e12200d7fd1d35be6a44f0e368179399ef6c6e84d.scope mems_allowed=0-3
 [20148402.293103] CPU: 14 PID: 48975 Comm: java Kdump: loaded Tainted: G        W  O  K  --------- -  - 4.18.0-147.mt20200626.413.el8_1.x86_64 #1
@@ -766,9 +775,9 @@ try_charge() {
 [20148402.321233] kmem: usage 478036kB, limit 9007199254740988kB, failcnt 0
 [20148402.322046] Memory cgroup stats for /kubepods.slice/kubepods-burstable.slice/kubepods-burstable-podd63c4bbe_5f18_11ec_bdcd_d094668d7dd6.slice/docker-083afd1a06b8b612ab5d974e12200d7fd1d35be6a44f0e368179399ef6c6e84d.scope: cache:27747820KB rss:4233580KB rss_huge:0KB shmem:27731164KB mapped_file:11880KB dirty:0KB writeback:1716KB swap:3190836KB inactive_anon:11311424KB active_anon:20656120KB inactive_file:10400KB active_file:4324KB unevictable:0KB
 [20148402.325486] Memory cgroup out of memory: Killed process 321688 (java) total-vm:10247356kB, anon-rss:2740520kB, file-rss:0kB, shmem-rss:0kB
-
+```
 #### 第三种case anon memory
-
+```
 [20219668.716979] java invoked oom-killer: gfp_mask=0x6000c0(GFP_KERNEL), nodemask=(null), order=0, oom_score_adj=916
 [20219668.717885] java cpuset=docker-083afd1a06b8b612ab5d974e12200d7fd1d35be6a44f0e368179399ef6c6e84d.scope mems_allowed=0-3
 [20219668.718723] CPU: 31 PID: 164878 Comm: java Kdump: loaded Tainted: G        W  O  K  --------- -  - 4.18.0-147.mt20200626.413.el8_1.x86_64 #1
@@ -806,7 +815,8 @@ try_charge() {
 [20219668.750146] Memory cgroup stats for /kubepods.slice/kubepods-burstable.slice/kubepods-burstable-podd63c4bbe_5f18_11ec_bdcd_d094668d7dd6.slice/docker-083afd1a06b8b612ab5d974e12200d7fd1d35be6a44f0e368179399ef6c6e84d.scope: cache:23708180KB rss:9214840KB rss_huge:0KB shmem:23689196KB mapped_file:32340KB dirty:0KB writeback:2376KB swap:2228952KB inactive_anon:7860516KB active_anon:25044932KB inactive_file:10828KB active_file:552KB unevictable:0KB
 [20219668.753688] Memory cgroup out of memory: Killed process 281482 (java) total-vm:10481240kB, anon-rss:3690112kB, file-rss:0kB, shmem-rss:0kB
 [20219669.132460] oom_reaper: reaped process 281482 (java), now anon-rss:0kB, file-rss:0kB, shmem-rss:0kB
-
+```
+```
 __handle_mm_fault()--->handle_pte_fault()--->do_anonymous_page()
 static int __handle_mm_fault(struct vm_area_struct *vma, unsigned long address,
 4041 >------->-------unsigned int flags)
@@ -978,8 +988,9 @@ static int __handle_mm_fault(struct vm_area_struct *vma, unsigned long address,
 3240 }
 还有除了anonymous page之外的page fault handler也会在容器内存超过上限时返回oom
 do_page_fault()--->__do_fault()--->ext4_filemap_fault()--->filemap_fault()--->add_to_page_cache_lru()--->__add_to_page_cache_locked()--->mem_cgroup_try_charge()--->try_charge()--->mem_cgroup_out_of_memory()
-
+```
 ### 第三种情况slab/slub中
+```
 1393 /*
 1394  * Interface to system's page allocator. No need to hold the
 1395  * kmem_cache_node ->list_lock.
@@ -1020,9 +1031,9 @@ do_page_fault()--->__do_fault()--->ext4_filemap_fault()--->filemap_fault()--->ad
 1430 
 1431 >-------return page;
 1432 }
-
+```
 ## 共享内存到底算page cache还是anon memory，共享内存(share memory)对memcg如何计数
-
+```
 1611 /*
 1612  * shmem_getpage_gfp - find page in cache, or get from swap, or allocate
 1613  *
@@ -1151,6 +1162,8 @@ do_page_fault()--->__do_fault()--->ext4_filemap_fault()--->filemap_fault()--->ad
 1867 >------->-------}
 。。。
 }
+```
+```
  858 static void __pagevec_lru_add_fn(struct page *page, struct lruvec *lruvec,
  859 >------->------->------->------- void *arg)
  860 {
@@ -1206,6 +1219,8 @@ do_page_fault()--->__do_fault()--->ext4_filemap_fault()--->filemap_fault()--->ad
  910 >-------trace_mm_lru_insertion(page, lru);
  911 }
  912 
+ ```
+ ```
 
  8 /**
   9  * page_is_file_cache - should the page be on a file LRU or anon LRU?
@@ -1330,9 +1345,11 @@ do_page_fault()--->__do_fault()--->ext4_filemap_fault()--->filemap_fault()--->ad
 465 >------->-------put_page(new_page);
 466 >-------return found_page;
 467 }
-
+```
+```
 420 static __always_inline int PageAnon(struct page *page)
 421 {
 422 >-------page = compound_head(page); 
 423 >-------return ((unsigned long)page->mapping & PAGE_MAPPING_ANON) != 0;
 424 }
+```
