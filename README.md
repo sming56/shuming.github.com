@@ -694,7 +694,7 @@ try_charge() {
 ```
 [20148497.767284] java invoked oom-killer: gfp_mask=0x6200ca(GFP_HIGHUSER_MOVABLE), nodemask=(null), order=0, oom_score_adj=916
 [20148497.768021] java cpuset=docker-083afd1a06b8b612ab5d974e12200d7fd1d35be6a44f0e368179399ef6c6e84d.scope mems_allowed=0-3
-[20148497.768802] CPU: 18 PID: 7127 Comm: java Kdump: loaded Tainted: G        W  O  K  --------- -  - 4.18.0-147.mt20200626.413.el8_1.x86_64 #1
+[20148497.768802] CPU: 18 PID: 7127 Comm: java Kdump: loaded Tainted: G        W  O  K  --------- -  - 4.18.0-xxxx.el8_1.x86_64 #1
 [20148497.770281] Hardware name: Dell Inc. PowerEdge R7415/065PKD, BIOS 1.15.0 09/11/2020
 [20148497.770986] Call Trace:
 [20148497.771697]  dump_stack+0x5c/0x80
@@ -739,7 +739,7 @@ try_charge() {
 ```
 [20148402.291616] java invoked oom-killer: gfp_mask=0x6200ca(GFP_HIGHUSER_MOVABLE), nodemask=(null), order=0, oom_score_adj=916
 [20148402.292342] java cpuset=docker-083afd1a06b8b612ab5d974e12200d7fd1d35be6a44f0e368179399ef6c6e84d.scope mems_allowed=0-3
-[20148402.293103] CPU: 14 PID: 48975 Comm: java Kdump: loaded Tainted: G        W  O  K  --------- -  - 4.18.0-147.mt20200626.413.el8_1.x86_64 #1
+[20148402.293103] CPU: 14 PID: 48975 Comm: java Kdump: loaded Tainted: G        W  O  K  --------- -  - 4.18.0-147.xxx.el8_1.x86_64 #1
 [20148402.294435] Hardware name: Dell Inc. PowerEdge R7415/065PKD, BIOS 1.15.0 09/11/2020
 [20148402.295126] Call Trace:
 [20148402.295823]  dump_stack+0x5c/0x80
@@ -780,7 +780,7 @@ try_charge() {
 ```
 [20219668.716979] java invoked oom-killer: gfp_mask=0x6000c0(GFP_KERNEL), nodemask=(null), order=0, oom_score_adj=916
 [20219668.717885] java cpuset=docker-083afd1a06b8b612ab5d974e12200d7fd1d35be6a44f0e368179399ef6c6e84d.scope mems_allowed=0-3
-[20219668.718723] CPU: 31 PID: 164878 Comm: java Kdump: loaded Tainted: G        W  O  K  --------- -  - 4.18.0-147.mt20200626.413.el8_1.x86_64 #1
+[20219668.718723] CPU: 31 PID: 164878 Comm: java Kdump: loaded Tainted: G        W  O  K  --------- -  - 4.18.0-147.xxx.el8_1.x86_64 #1
 [20219668.720370] Hardware name: Dell Inc. PowerEdge R7415/065PKD, BIOS 1.15.0 09/11/2020
 [20219668.721472] Call Trace:
 [20219668.722344]  dump_stack+0x5c/0x80
