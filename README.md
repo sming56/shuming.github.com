@@ -142,7 +142,7 @@ https://blog.csdn.net/21cnbao/article/details/112455742
 ## 4) memcg共享ZONE内存管理带来得隔离性问题
 一个memcg缺内存导致在某个zone上直接内存回收，可能回收这个zone上其他memcg内存：__alloc_pages_direct_reclaim()
 
-## 5) memcg回收线程也可能回收zone上其他容器内存：balance_mem_cgroup_pgdat()
+## 5) memcg回收线程也可能回收zone上其他容器内存：balance_mem_cgroup_pgdat() （非通用内核）
 
 ## 6) 内存碎片整理算法
 如何确定系统有大量碎片适合整理碎片：kcompactd_node_suitable（）
