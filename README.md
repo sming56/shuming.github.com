@@ -5,6 +5,39 @@
 
 ## 2) LRU_ACTIVE和LRU_INACTIVE list大小平衡算法
 inactive_list_is_low()
+4.18内核在inactive 和 active page(无论是file lru 还是anon lru), 比例严重失调时回导致系统回收anon page，也就是会swap，尽管当时file lru还有大量的内存页。
+
+2513 /*
+2514  * This is a basic per-node page freer.  Used by both kswapd and direct reclaim.
+2515  */
+2516 static void shrink_node_memcg(struct pglist_data *pgdat, struct mem_cgroup *memcg,
+2517 >------->------->-------      struct scan_control *sc, unsigned long *lru_pages)
+2518 {
+2519 >-------struct lruvec *lruvec = mem_cgroup_lruvec(pgdat, memcg);
+2520 >-------unsigned long nr[NR_LRU_LISTS];
+2521 >-------unsigned long targets[NR_LRU_LISTS];
+2522 >-------unsigned long nr_to_scan;
+2523 >-------enum lru_list lru;
+2524 >-------unsigned long nr_reclaimed = 0;
+2525 >-------unsigned long nr_to_reclaim = sc->nr_to_reclaim;
+2526 >-------struct blk_plug plug;
+2527 >-------bool scan_adjusted;
+...
+2620 >-------blk_finish_plug(&plug);
+2621 >-------sc->nr_reclaimed += nr_reclaimed;
+2622 
+2623 >-------/*
+2624 >------- * Even if we did not try to evict anon pages at all, we want to
+2625 >------- * rebalance the anon lru active/inactive ratio.
+2626 >------- */
+2627 >-------if (inactive_list_is_low(lruvec, false, memcg, sc, true))  《---inactive lru和active lru比例失调
+2628 >------->-------shrink_active_list(SWAP_CLUSTER_MAX, lruvec,
+2629 >------->------->------->-------   sc, LRU_ACTIVE_ANON); 《---回收anon lru，导致swap
+2630 }
+
+
+
+inactive_list_is_low()
 
 ## 3)pgdat->lru_lock竞争问题，改为memcg->lru_lock
 https://blog.csdn.net/21cnbao/article/details/112455742
