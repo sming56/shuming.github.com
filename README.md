@@ -7,6 +7,35 @@
 inactive_list_is_low()
 4.18内核在inactive 和 active page(无论是file lru 还是anon lru), 比例严重失调时回导致系统回收anon page，也就是会swap，尽管当时file lru还有大量的内存页。
 ``
+2204 /*
+2205  * The inactive anon list should be small enough that the VM never has
+2206  * to do too much work.
+2207  *
+2208  * The inactive file list should be small enough to leave most memory
+2209  * to the established workingset on the scan-resistant active list,
+2210  * but large enough to avoid thrashing the aggregate readahead window.
+2211  *
+2212  * Both inactive lists should also be large enough that each inactive
+2213  * page has a chance to be referenced again before it is reclaimed.
+2214  *
+2215  * If that fails and refaulting is observed, the inactive list grows.
+2216  *
+2217  * The inactive_ratio is the target ratio of ACTIVE to INACTIVE pages
+2218  * on this LRU, maintained by the pageout code. An inactive_ratio
+2219  * of 3 means 3:1 or 25% of the pages are kept on the inactive list.
+2220  *
+2221  * total     target    max
+2222  * memory    ratio     inactive
+2223  * -------------------------------------
+2224  *   10MB       1         5MB
+2225  *  100MB       1        50MB
+2226  *    1GB       3       250MB
+2227  *   10GB      10       0.9GB
+2228  *  100GB      31         3GB
+2229  *    1TB     101        10GB
+2230  *   10TB     320        32GB
+2231  */
+
 2513 /*
 2514  * This is a basic per-node page freer.  Used by both kswapd and direct reclaim.
 2515  */
