@@ -777,3 +777,532 @@ try_charge() {
 [20219668.750146] Memory cgroup stats for /kubepods.slice/kubepods-burstable.slice/kubepods-burstable-podd63c4bbe_5f18_11ec_bdcd_d094668d7dd6.slice/docker-083afd1a06b8b612ab5d974e12200d7fd1d35be6a44f0e368179399ef6c6e84d.scope: cache:23708180KB rss:9214840KB rss_huge:0KB shmem:23689196KB mapped_file:32340KB dirty:0KB writeback:2376KB swap:2228952KB inactive_anon:7860516KB active_anon:25044932KB inactive_file:10828KB active_file:552KB unevictable:0KB
 [20219668.753688] Memory cgroup out of memory: Killed process 281482 (java) total-vm:10481240kB, anon-rss:3690112kB, file-rss:0kB, shmem-rss:0kB
 [20219669.132460] oom_reaper: reaped process 281482 (java), now anon-rss:0kB, file-rss:0kB, shmem-rss:0kB
+
+__handle_mm_fault()--->handle_pte_fault()--->do_anonymous_page()
+static int __handle_mm_fault(struct vm_area_struct *vma, unsigned long address,
+4041 >------->-------unsigned int flags)
+4042 {
+4043 >-------struct vm_fault vmf = {
+4044 >------->-------.vma = vma,
+4045 >------->-------.address = address & PAGE_MASK,
+4046 >------->-------.flags = flags,
+4047 >------->-------.pgoff = linear_page_index(vma, address),
+4048 >------->-------.gfp_mask = __get_fault_gfp_mask(vma),
+4049 >-------};
+4050 >-------unsigned int dirty = flags & FAULT_FLAG_WRITE;
+4051 >-------struct mm_struct *mm = vma->vm_mm;
+4052 >-------pgd_t *pgd;
+4053 >-------p4d_t *p4d;
+4054 >-------int ret;
+4055 
+4056 >-------pgd = pgd_offset(mm, address);
+4057 >-------p4d = p4d_alloc(mm, pgd, address);
+4058 >-------if (!p4d)
+4059 >------->-------return VM_FAULT_OOM;
+4060 
+4061 >-------vmf.pud = pud_alloc(mm, p4d, address);
+4062 >-------if (!vmf.pud)
+4063 >------->-------return VM_FAULT_OOM; <---oom
+4064 >-------if (pud_none(*vmf.pud) && transparent_hugepage_enabled(vma)) {
+4065 >------->-------ret = create_huge_pud(&vmf);
+4066 >------->-------if (!(ret & VM_FAULT_FALLBACK))
+4067 >------->------->-------return ret;
+4068 >-------} else {
+4069 >------->-------pud_t orig_pud = *vmf.pud;
+4097 >------->-------barrier();
+4098 >------->-------if (unlikely(is_swap_pmd(orig_pmd))) {
+4099 >------->------->-------VM_BUG_ON(thp_migration_supported() &&
+4100 >------->------->------->------->-------  !is_pmd_migration_entry(orig_pmd));
+4101 >------->------->-------if (is_pmd_migration_entry(orig_pmd))
+4102 >------->------->------->-------pmd_migration_entry_wait(mm, vmf.pmd);
+4103 >------->------->-------return 0;
+4104 >------->-------}
+4105 >------->-------if (pmd_trans_huge(orig_pmd) || pmd_devmap(orig_pmd)) {
+4106 >------->------->-------if (pmd_protnone(orig_pmd) && vma_is_accessible(vma))
+4107 >------->------->------->-------return do_huge_pmd_numa_page(&vmf, orig_pmd);
+4108 
+4109 >------->------->-------if (dirty && !pmd_write(orig_pmd)) {
+4110 >------->------->------->-------ret = wp_huge_pmd(&vmf, orig_pmd);
+4111 >------->------->------->-------if (!(ret & VM_FAULT_FALLBACK))
+4112 >------->------->------->------->-------return ret;
+4113 >------->------->-------} else {
+4114 >------->------->------->-------huge_pmd_set_accessed(&vmf, orig_pmd);
+4115 >------->------->------->-------return 0;
+4116 >------->------->-------}
+4117 >------->-------}
+4118 >-------}
+4119 
+4120 >-------return handle_pte_fault(&vmf);
+4121 }
+3128  * We enter with non-exclusive mmap_sem (to exclude vma changes,
+3129  * but allow concurrent faults), and pte mapped but not yet locked.
+3130  * We return with mmap_sem still held, but pte unmapped and unlocked.
+3131  */
+3132 static int do_anonymous_page(struct vm_fault *vmf)
+3133 {
+3134 >-------struct vm_area_struct *vma = vmf->vma;
+3135 >-------struct mem_cgroup *memcg;
+3136 >-------struct page *page;
+3137 >-------int ret = 0;
+3138 >-------pte_t entry;
+3139 
+3140 >-------/* File mapping without ->vm_ops ? */
+3141 >-------if (vma->vm_flags & VM_SHARED)
+3142 >------->-------return VM_FAULT_SIGBUS;
+3143 
+3144 >-------/*
+3145 >------- * Use pte_alloc() instead of pte_alloc_map().  We can't run
+3146 >------- * pte_offset_map() on pmds where a huge pmd might be created
+3147 >------- * from a different thread.
+3148 >------- *
+3149 >------- * pte_alloc_map() is safe to use under down_write(mmap_sem) or when
+3150 >------- * parallel threads are excluded by other means.
+3151 >------- *
+3152 >------- * Here we only have down_read(mmap_sem).
+3153 >------- */
+3154 >-------if (pte_alloc(vma->vm_mm, vmf->pmd, vmf->address))
+3155 >------->-------return VM_FAULT_OOM;
+3157 >-------/* See the comment in pte_alloc_one_map() */
+3158 >-------if (unlikely(pmd_trans_unstable(vmf->pmd)))
+3159 >------->-------return 0;
+3160 
+3161 >-------/* Use the zero-page for reads */
+3162 >-------if (!(vmf->flags & FAULT_FLAG_WRITE) &&
+3163 >------->------->-------!mm_forbids_zeropage(vma->vm_mm)) {
+3164 >------->-------entry = pte_mkspecial(pfn_pte(my_zero_pfn(vmf->address),
+3165 >------->------->------->------->------->-------vma->vm_page_prot));
+3166 >------->-------vmf->pte = pte_offset_map_lock(vma->vm_mm, vmf->pmd,
+3167 >------->------->------->-------vmf->address, &vmf->ptl);
+3168 >------->-------if (!pte_none(*vmf->pte))
+3169 >------->------->-------goto unlock;
+3170 >------->-------ret = check_stable_address_space(vma->vm_mm);
+3171 >------->-------if (ret)
+3172 >------->------->-------goto unlock;
+3173 >------->-------/* Deliver the page fault to userland, check inside PT lock */
+3174 >------->-------if (userfaultfd_missing(vma)) {
+3175 >------->------->-------pte_unmap_unlock(vmf->pte, vmf->ptl);
+3176 >------->------->-------return handle_userfault(vmf, VM_UFFD_MISSING);
+3177 >------->-------}
+3178 >------->-------goto setpte;
+3179 >-------}
+3180 
+3181 >-------/* Allocate our own private page. */
+3182 >-------if (unlikely(anon_vma_prepare(vma)))
+3183 >------->-------goto oom;
+3184 >-------page = alloc_zeroed_user_highpage_movable(vma, vmf->address);
+3185 >-------if (!page)
+3186 >------->-------goto oom;
+3187 
+3188 >-------if (mem_cgroup_try_charge_delay(page, vma->vm_mm, GFP_KERNEL, &memcg,
+3189 >------->------->------->------->-------false)) <----超内存限制了
+3190 >------->-------goto oom_free_page; 
+3191 
+3192 >-------/*
+3193 >------- * The memory barrier inside __SetPageUptodate makes sure that
+3194 >------- * preceeding stores to the page contents become visible before
+
+3195 >------- * the set_pte_at() write.
+3196 >------- */
+3197 >-------__SetPageUptodate(page);
+3198 
+3199 >-------entry = mk_pte(page, vma->vm_page_prot);
+3200 >-------if (vma->vm_flags & VM_WRITE)
+3201 >------->-------entry = pte_mkwrite(pte_mkdirty(entry));
+3202 
+3203 >-------vmf->pte = pte_offset_map_lock(vma->vm_mm, vmf->pmd, vmf->address,
+3204 >------->------->-------&vmf->ptl);
+3205 >-------if (!pte_none(*vmf->pte))
+3206 >------->-------goto release;
+3207 
+3208 >-------ret = check_stable_address_space(vma->vm_mm);
+3209 >-------if (ret)
+3210 >------->-------goto release;
+3211 
+3212 >-------/* Deliver the page fault to userland, check inside PT lock */
+3213 >-------if (userfaultfd_missing(vma)) {
+3214 >------->-------pte_unmap_unlock(vmf->pte, vmf->ptl);
+3215 >------->-------mem_cgroup_cancel_charge(page, memcg, false);
+3216 >------->-------put_page(page);
+3217 >------->-------return handle_userfault(vmf, VM_UFFD_MISSING);
+3218 >-------}
+3219 
+3220 >-------inc_mm_counter_fast(vma->vm_mm, MM_ANONPAGES);
+3221 >-------page_add_new_anon_rmap(page, vma, vmf->address, false);
+3222 >-------mem_cgroup_commit_charge(page, memcg, false, false);
+3223 >-------lru_cache_add_active_or_unevictable(page, vma);
+3224 setpte:
+3225 >-------set_pte_at(vma->vm_mm, vmf->address, vmf->pte, entry);
+3226 
+3227 >-------/* No need to invalidate - it was non-present before */
+3228 >-------update_mmu_cache(vma, vmf->address, vmf->pte);
+3229 unlock:
+3230 >-------pte_unmap_unlock(vmf->pte, vmf->ptl);
+3231 >-------return ret;
+3232 release:
+3233 >-------mem_cgroup_cancel_charge(page, memcg, false);
+3234 >-------put_page(page);
+3235 >-------goto unlock;
+3236 oom_free_page:
+3237 >-------put_page(page);
+3238 oom:
+3239 >-------return VM_FAULT_OOM; 《---oom了
+3240 }
+还有除了anonymous page之外的page fault handler也会在容器内存超过上限时返回oom
+do_page_fault()--->__do_fault()--->ext4_filemap_fault()--->filemap_fault()--->add_to_page_cache_lru()--->__add_to_page_cache_locked()--->mem_cgroup_try_charge()--->try_charge()--->mem_cgroup_out_of_memory()
+
+### 第三种情况slab/slub中
+1393 /*
+1394  * Interface to system's page allocator. No need to hold the
+1395  * kmem_cache_node ->list_lock.
+1396  *
+1397  * If we requested dmaable memory, we will get it. Even if we
+1398  * did not request dmaable memory, we might get it, but that
+1399  * would be relatively rare and ignorable.
+1400  */
+1401 static struct page *kmem_getpages(struct kmem_cache *cachep, gfp_t flags,
+1402 >------->------->------->------->------->------->------->-------int nodeid)
+1403 {
+1404 >-------struct page *page;
+1405 >-------int nr_pages;
+1406 
+1407 >-------flags |= cachep->allocflags;
+1408 
+1409 >-------page = __alloc_pages_node(nodeid, flags, cachep->gfporder);
+1410 >-------if (!page) {
+1411 >------->-------slab_out_of_memory(cachep, flags, nodeid);
+1412 >------->-------return NULL;
+1413 >-------}
+1414 
+1415 >-------if (memcg_charge_slab(page, flags, cachep->gfporder, cachep)) {  <---整个slab都charge在一个memcg上，其他memcg会不会用这个slab?   memcg_kmem_charge_memc()--->try_charge()--->mem_cgroup_oom()
+1416 >------->-------__free_pages(page, cachep->gfporder);
+1417 >------->-------return NULL;
+1418 >-------}
+1419 
+1420 >-------nr_pages = (1 << cachep->gfporder);
+1421 >-------if (cachep->flags & SLAB_RECLAIM_ACCOUNT)
+1422 >------->-------mod_lruvec_page_state(page, NR_SLAB_RECLAIMABLE, nr_pages);
+1423 >-------else
+1424 >------->-------mod_lruvec_page_state(page, NR_SLAB_UNRECLAIMABLE, nr_pages);
+1425 
+1426 >-------__SetPageSlab(page);
+1427 >-------/* Record if ALLOC_NO_WATERMARKS was set when allocating the slab */
+1428 >-------if (sk_memalloc_socks() && page_is_pfmemalloc(page))
+1429 >------->-------SetPageSlabPfmemalloc(page);
+1430 
+1431 >-------return page;
+1432 }
+
+## 共享内存到底算page cache还是anon memory，共享内存(share memory)对memcg如何计数
+1611 /*
+1612  * shmem_getpage_gfp - find page in cache, or get from swap, or allocate
+1613  *
+1614  * If we allocate a new one we do not mark it dirty. That's up to the
+1615  * vm. If we swap it in we mark it dirty since we also free the swap
+1616  * entry since a page cannot live in both the swap and page cache.
+1617  *
+1618  * fault_mm and fault_type are only supplied by shmem_fault:
+1619  * otherwise they are NULL.
+1620  */
+1621 static int shmem_getpage_gfp(struct inode *inode, pgoff_t index,
+1622 >-------struct page **pagep, enum sgp_type sgp, gfp_t gfp,
+1623 >-------struct vm_area_struct *vma, struct vm_fault *vmf, int *fault_type)
+1624 {
+1625 >-------struct address_space *mapping = inode->i_mapping;
+1626 >-------struct shmem_inode_info *info = SHMEM_I(inode);
+1627 >-------struct shmem_sb_info *sbinfo;
+1628 >-------struct mm_struct *charge_mm;
+1629 >-------struct mem_cgroup *memcg;
+1630 >-------struct page *page;
+1631 >-------swp_entry_t swap;
+1632 >-------enum sgp_type sgp_huge = sgp;
+1633 >-------pgoff_t hindex = index;
+1634 >-------int error;
+1635 >-------int once = 0;
+1636 >-------int alloced = 0;
+1637 
+1638 >-------if (index > (MAX_LFS_FILESIZE >> PAGE_SHIFT))
+1639 >------->-------return -EFBIG;
+1640 >-------if (sgp == SGP_NOHUGE || sgp == SGP_HUGE)
+1641 >------->-------sgp = SGP_CACHE;
+。。。
+1679 >-------if (swap.val) {
+1680 >------->-------/* Look it up and read it in.. */
+1681 >------->-------page = lookup_swap_cache(swap, NULL, 0);
+1682 >------->-------if (!page) {
+1683 >------->------->-------/* Or update major stats only when swapin succeeds?? */
+1684 >------->------->-------if (fault_type) {
+1685 >------->------->------->-------*fault_type |= VM_FAULT_MAJOR;
+1686 >------->------->------->-------count_vm_event(PGMAJFAULT);
+1687 >------->------->------->-------count_memcg_event_mm(charge_mm, PGMAJFAULT);
+1688 >------->------->-------}
+1689 >------->------->-------/* Here we actually start the io */
+1690 >------->------->-------page = shmem_swapin(swap, gfp, info, index);《---从swap 文件中读取内容，产生IO。 page会被__SetPageSwapBacked（） see, __read_swap_cache_async()<---read_swap_cache_async()<----swap_cluster_readahead()<---shmem_swapin()
+1691 >------->------->-------if (!page) {
+1692 >------->------->------->-------error = -ENOMEM;
+1693 >------->------->------->-------goto failed;
+1694 >------->------->-------}
+1695 >------->-------}
+1696 
+1697 >------->-------/* We have to do this with page locked to prevent races */
+1698 >------->-------lock_page(page);
+1699 >------->-------if (!PageSwapCache(page) || page_private(page) != swap.val ||
+1700 >------->-------    !shmem_confirm_swap(mapping, index, swap)) {
+1701 >------->------->-------error = -EEXIST;>-------/* try again */
+1702 >------->------->-------goto unlock;
+1703 >------->-------}
+1704 >------->-------if (!PageUptodate(page)) {
+1705 >------->------->-------error = -EIO;
+1706 >------->------->-------goto failed;
+1707 >------->-------}
+1708 >------->-------wait_on_page_writeback(page);
+1709 
+1710 >------->-------if (shmem_should_replace_page(page, gfp)) {
+1711 >------->------->-------error = shmem_replace_page(&page, gfp, info, index);
+1712 >------->------->-------if (error)
+1713 >------->------->------->-------goto failed;
+1714 >------->-------}
+1715 
+1716 >------->-------error = mem_cgroup_try_charge_delay(page, charge_mm, gfp, &memcg,
+1717 >------->------->------->-------false); 《---内存计数
+1718 >------->-------if (!error) {
+1719 >------->------->-------error = shmem_add_to_page_cache(page, mapping, index,
+1720 >------->------->------->------->------->-------swp_to_radix_entry(swap));
+1721 >------->------->-------/*
+1722 >------->------->------- * We already confirmed swap under page lock, and make
+1723 >------->------->------- * no memory allocation here, so usually no possibility
+1724 >------->------->------- * of error; but free_swap_and_cache() only trylocks a
+1725 >------->------->------- * page, so it is just possible that the entry has been
+1726 >------->------->------- * truncated or holepunched since swap was confirmed.
+1727 >------->------->------- * shmem_undo_range() will have done some of the
+1728 >------->------->------- * unaccounting, now delete_from_swap_cache() will do
+1729 >------->------->------- * the rest.
+1730 >------->------->------- * Reset swap.val? No, leave it so "failed" goes back to
+1731 >------->------->------- * "repeat": reading a hole and writing should succeed.
+1732 >------->------->------- */
+1733 >------->------->-------if (error) {
+1734 >------->------->------->-------mem_cgroup_cancel_charge(page, memcg, false);
+1735 >------->------->------->-------delete_from_swap_cache(page);
+
+。。。
+1833 >------->-------if (error) {
+1834 >------->------->-------mem_cgroup_cancel_charge(page, memcg,
+1835 >------->------->------->------->-------PageTransHuge(page));
+1836 >------->------->-------goto unacct;
+1837 >------->-------}
+1838 >------->-------mem_cgroup_commit_charge(page, memcg, false,
+1839 >------->------->------->-------PageTransHuge(page));
+1840 >------->-------lru_cache_add_anon(page); <---加入annon队列,算成anon memory，先放到lru_cache上，适当时机调用__pagevec_lru_add_fn（）放入正确的lru列表
+1841 
+1842 >------->-------spin_lock_irq(&info->lock);
+1843 >------->-------info->alloced += 1 << compound_order(page);
+1844 >------->-------inode->i_blocks += BLOCKS_PER_PAGE << compound_order(page);
+1845 >------->-------shmem_recalc_inode(inode);
+1846 >------->-------spin_unlock_irq(&info->lock);
+1847 >------->-------alloced = true;
+1848 
+1849 >------->-------if (PageTransHuge(page) &&
+1850 >------->------->------->-------DIV_ROUND_UP(i_size_read(inode), PAGE_SIZE) <
+1851 >------->------->------->-------hindex + HPAGE_PMD_NR - 1) {
+1852 >------->------->-------/*
+1853 >------->------->------- * Part of the huge page is beyond i_size: subject
+1854 >------->------->------- * to shrink under memory pressure.
+1855 >------->------->------- */
+1856 >------->------->-------spin_lock(&sbinfo->shrinklist_lock);
+1857 >------->------->-------/*
+1858 >------->------->------- * _careful to defend against unlocked access to
+1859 >------->------->------- * ->shrink_list in shmem_unused_huge_shrink()
+1860 >------->------->------- */
+1861 >------->------->-------if (list_empty_careful(&info->shrinklist)) {
+1862 >------->------->------->-------list_add_tail(&info->shrinklist,
+1863 >------->------->------->------->------->-------&sbinfo->shrinklist);
+1864 >------->------->------->-------sbinfo->shrinklist_len++;
+1865 >------->------->-------}
+1866 >------->------->-------spin_unlock(&sbinfo->shrinklist_lock);
+1867 >------->-------}
+。。。
+}
+ 858 static void __pagevec_lru_add_fn(struct page *page, struct lruvec *lruvec,
+ 859 >------->------->------->------- void *arg)
+ 860 {
+ 861 >-------enum lru_list lru;
+ 862 >-------int was_unevictable = TestClearPageUnevictable(page);
+ 863 
+ 864 >-------VM_BUG_ON_PAGE(PageLRU(page), page);
+ 865 
+ 866 >-------SetPageLRU(page);
+ 867 >-------/*
+ 868 >------- * Page becomes evictable in two ways:
+ 869 >------- * 1) Within LRU lock [munlock_vma_pages() and __munlock_pagevec()].
+ 870 >------- * 2) Before acquiring LRU lock to put the page to correct LRU and then
+ 871 >------- *   a) do PageLRU check with lock [check_move_unevictable_pages]
+ 872 >------- *   b) do PageLRU check before lock [clear_page_mlock]
+ 873 >------- *
+ 874 >------- * (1) & (2a) are ok as LRU lock will serialize them. For (2b), we need
+ 875 >------- * following strict ordering:
+ 876 >------- *
+ 877 >------- * #0: __pagevec_lru_add_fn>---->-------#1: clear_page_mlock
+ 878 >------- *
+ 879 >------- * SetPageLRU()>>------->------->-------TestClearPageMlocked()
+ 880 >------- * smp_mb() // explicit ordering>-------// above provides strict
+ 881 >------- *>----->------->------->------->-------// ordering
+ 882 >------- * PageMlocked()>------->------->-------PageLRU()
+ 883 >------- *
+ 884 >------- *
+ 885 >------- * if '#1' does not observe setting of PG_lru by '#0' and fails
+ 886 >------- * isolation, the explicit barrier will make sure that page_evictable
+ 887 >------- * check will put the page in correct LRU. Without smp_mb(), SetPageLRU
+ 888 >------- * can be reordered after PageMlocked check and can make '#1' to fail
+ 889 >------- * the isolation of the page whose Mlocked bit is cleared (#0 is also
+ 890 >------- * looking at the same page) and the evictable page will be stranded
+ 891 >------- * in an unevictable LRU.
+ 892 >------- */
+ 893 >-------smp_mb();
+ 894 
+ 895 >-------if (page_evictable(page)) {
+ 896 >------->-------lru = page_lru(page);《---从page中得到lru属性
+ 897 >------->-------update_page_reclaim_stat(lruvec, page_is_file_cache(page),
+ 898 >------->------->------->------->------- PageActive(page));
+ 899 >------->-------if (was_unevictable)
+ 900 >------->------->-------count_vm_event(UNEVICTABLE_PGRESCUED);
+ 901 >-------} else {
+ 902 >------->-------lru = LRU_UNEVICTABLE;
+ 903 >------->-------ClearPageActive(page);
+ 904 >------->-------SetPageUnevictable(page);
+ 905 >------->-------if (!was_unevictable)
+ 906 >------->------->-------count_vm_event(UNEVICTABLE_PGCULLED);
+ 907 >-------}
+ 908 
+ 909 >-------add_page_to_lru_list(page, lruvec, lru);《---根据lru属性加入到相应的lru列表
+ 910 >-------trace_mm_lru_insertion(page, lru);
+ 911 }
+ 912 
+
+ 8 /**
+  9  * page_is_file_cache - should the page be on a file LRU or anon LRU?
+ 10  * @page: the page to test
+ 11  *
+ 12  * Returns 1 if @page is page cache page backed by a regular filesystem,
+ 13  * or 0 if @page is anonymous, tmpfs or otherwise ram or swap backed.
+ 14  * Used by functions that manipulate the LRU lists, to sort a page
+ 15  * onto the right LRU list.
+ 16  *
+ 17  * We would like to get this info without a page flag, but the state
+ 18  * needs to survive until the page is last deleted from the LRU, which
+ 19  * could be as far down as __page_cache_release.
+ 20  */
+ 21 static inline int page_is_file_cache(struct page *page)
+ 22 {
+ 23 >-------return !PageSwapBacked(page); <---所有非SwapBacked的page都是file cache。反之就是annon page， see  page_lru_base_type().另外还有一个函数，PageAnon（），是以mapping类型决定是否annon page。
+ 24 }
+ 68 /**
+ 69  * page_lru_base_type - which LRU list type should a page be on?
+ 70  * @page: the page to test
+ 71  *
+ 72  * Used for LRU list index arithmetic.
+ 73  *
+ 74  * Returns the base LRU type - file or anon - @page should be on.
+ 75  */
+ 76 static inline enum lru_list page_lru_base_type(struct page *page)
+ 77 {
+ 78 >-------if (page_is_file_cache(page))
+ 79 >------->-------return LRU_INACTIVE_FILE;
+ 80 >-------return LRU_INACTIVE_ANON;
+ 81 }
+377 struct page *__read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
+378 >------->------->-------struct vm_area_struct *vma, unsigned long addr,
+379 >------->------->-------bool *new_page_allocated)
+380 {
+381 >-------struct page *found_page, *new_page = NULL;
+382 >-------struct address_space *swapper_space = swap_address_space(entry);
+383 >-------int err;
+384 >-------*new_page_allocated = false;
+385 
+386 >-------do {
+387 >------->-------/*
+388 >------->------- * First check the swap cache.  Since this is normally
+389 >------->------- * called after lookup_swap_cache() failed, re-calling
+390 >------->------- * that would confuse statistics.
+391 >------->------- */
+392 >------->-------found_page = find_get_page(swapper_space, swp_offset(entry));
+393 >------->-------if (found_page)
+394 >------->------->-------break;
+395 
+396 >------->-------/*
+397 >------->------- * Just skip read ahead for unused swap slot.
+398 >------->------- * During swap_off when swap_slot_cache is disabled,
+399 >------->------- * we have to handle the race between putting
+400 >------->------- * swap entry in swap cache and marking swap slot
+401 >------->------- * as SWAP_HAS_CACHE.  That's done in later part of code or
+402 >------->------- * else swap_off will be aborted if we return NULL.
+403 >------->------- */
+404 >------->-------if (!__swp_swapcount(entry) && swap_slot_cache_enabled)
+405 >------->------->-------break;
+406 
+407 >------->-------/*
+408 >------->------- * Get a new page to read into from swap.
+409 >------->------- */
+410 >------->-------if (!new_page) {
+411 >------->------->-------new_page = alloc_page_vma(gfp_mask, vma, addr);
+412 >------->------->-------if (!new_page)
+413 >------->------->------->-------break;>->-------/* Out of memory */
+414 >------->-------}
+415 
+416 >------->-------/*
+417 >------->------- * call radix_tree_preload() while we can wait.
+418 >------->------- */
+419 >------->-------err = radix_tree_maybe_preload(gfp_mask & GFP_KERNEL);
+420 >------->-------if (err)
+421 >------->------->-------break;
+422 423 >------->-------/*
+424 >------->------- * Swap entry may have been freed since our caller observed it.
+425 >------->------- */
+426 >------->-------err = swapcache_prepare(entry);
+427 >------->-------if (err == -EEXIST) {
+428 >------->------->-------radix_tree_preload_end();
+429 >------->------->-------/*
+430 >------->------->------- * We might race against get_swap_page() and stumble
+431 >------->------->------- * across a SWAP_HAS_CACHE swap_map entry whose page
+432 >------->------->------- * has not been brought into the swapcache yet.
+433 >------->------->------- */
+434 >------->------->-------cond_resched();
+435 >------->------->-------continue;
+436 >------->-------}
+437 >------->-------if (err) {>----->-------/* swp entry is obsolete ? */
+
+437 >------->-------if (err) {>----->-------/* swp entry is obsolete ? */
+438 >------->------->-------radix_tree_preload_end();
+439 >------->------->-------break;
+440 >------->-------}
+441 
+442 >------->-------/* May fail (-ENOMEM) if radix-tree node allocation failed. */
+443 >------->-------__SetPageLocked(new_page);
+444 >------->-------__SetPageSwapBacked(new_page); <----set page swap, here, 最终被__pagevec_lru_add_fn（）放入annon lru list
+445 >------->-------err = __add_to_swap_cache(new_page, entry);
+446 >------->-------if (likely(!err)) {
+447 >------->------->-------radix_tree_preload_end();
+448 >------->------->-------/*
+449 >------->------->------- * Initiate read into locked page and return.
+450 >------->------->------- */
+451 >------->------->-------lru_cache_add_anon(new_page);
+452 >------->------->-------*new_page_allocated = true;
+453 >------->------->-------return new_page;
+454 >------->-------}
+455 >------->-------radix_tree_preload_end();
+456 >------->-------__ClearPageLocked(new_page);
+457 >------->-------/*
+458 >------->------- * add_to_swap_cache() doesn't return -EEXIST, so we can safely
+459 >------->------- * clear SWAP_HAS_CACHE flag.
+460 >------->------- */
+461 >------->-------put_swap_page(new_page, entry);
+462 >-------} while (err != -ENOMEM);
+463 
+464 >-------if (new_page)
+465 >------->-------put_page(new_page);
+466 >-------return found_page;
+467 }
+
+420 static __always_inline int PageAnon(struct page *page)
+421 {
+422 >-------page = compound_head(page); 
+423 >-------return ((unsigned long)page->mapping & PAGE_MAPPING_ANON) != 0;
+424 }
