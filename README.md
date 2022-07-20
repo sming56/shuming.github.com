@@ -1354,3 +1354,54 @@ do_page_fault()--->__do_fault()--->ext4_filemap_fault()--->filemap_fault()--->ad
 423 >-------return ((unsigned long)page->mapping & PAGE_MAPPING_ANON) != 0;
 424 }
 ```
+ ## 16） 4.18内核当容器还有page cache的情况下为什么会回收anon heap
+ 4.18内核在inactive和active内存极端不平衡的情况下，也就是inactive过低会选择回收active anon 页，从而引起swap。根因在于业务内存访问过于频繁，active LRU链表上堆积了过多页。
+ ```
+ 2513 /*
+2514  * This is a basic per-node page freer.  Used by both kswapd and direct reclaim.
+2515  */
+2516 static void shrink_node_memcg(struct pglist_data *pgdat, struct mem_cgroup *memcg,
+2517 >------->------->-------      struct scan_control *sc, unsigned long *lru_pages)
+2518 {
+2519 >-------struct lruvec *lruvec = mem_cgroup_lruvec(pgdat, memcg);
+2520 >-------unsigned long nr[NR_LRU_LISTS];
+2521 >-------unsigned long targets[NR_LRU_LISTS];
+2522 >-------unsigned long nr_to_scan;
+2523 >-------enum lru_list lru;
+2524 >-------unsigned long nr_reclaimed = 0;
+2525 >-------unsigned long nr_to_reclaim = sc->nr_to_reclaim;
+2526 >-------struct blk_plug plug;
+2527 >-------bool scan_adjusted;
+2528 
+2529 >-------get_scan_count(lruvec, memcg, sc, nr, lru_pages);
+2530 
+2531 >-------/* Record the original scan target for proportional adjustments later */
+2532 >-------memcpy(targets, nr, sizeof(nr));
+2533 
+2534 >-------/*
+2535 >------- * Global reclaiming within direct reclaim at DEF_PRIORITY is a normal
+2536 >------- * event that can occur when there is little memory pressure e.g.
+2537 >------- * multiple streaming readers/writers. Hence, we do not abort scanning
+2538 >------- * when the requested number of pages are reclaimed when scanning at
+2539 >------- * DEF_PRIORITY on the assumption that the fact we are direct
+2540 >------- * reclaiming implies that kswapd is not keeping up and it is best to
+2541 >------- * do a batch of work at once. For memcg reclaim one check is made to
+2542 >------- * abort proportional reclaim if either the file or anon lru has already
+2543 >------- * dropped to zero at the first pass.
+2544 >------- */
+2545 >-------scan_adjusted = (global_reclaim(sc) && !current_is_kswapd() &&
+2546 >------->------->------- sc->priority == DEF_PRIORITY);
+。。。
+2620 >-------blk_finish_plug(&plug);
+2621 >-------sc->nr_reclaimed += nr_reclaimed;
+2622 
+2623 >-------/*
+2624 >------- * Even if we did not try to evict anon pages at all, we want to
+2625 >------- * rebalance the anon lru active/inactive ratio.
+2626 >------- */
+2627 >-------if (inactive_list_is_low(lruvec, false, memcg, sc, true)) 《---如果lru inactive list远低于lru active list
+2628 >------->-------shrink_active_list(SWAP_CLUSTER_MAX, lruvec,
+2629 >------->------->------->-------   sc, LRU_ACTIVE_ANON); 《--回收ACTIVE ANON
+2630 }
+ ```
+ 
