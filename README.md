@@ -1354,8 +1354,8 @@ do_page_fault()--->__do_fault()--->ext4_filemap_fault()--->filemap_fault()--->ad
 423 >-------return ((unsigned long)page->mapping & PAGE_MAPPING_ANON) != 0;
 424 }
 ```
- ## 16） 4.18内核当容器还有page cache的情况下为什么会回收anon heap
- 4.18内核在inactive和active内存极端不平衡的情况下，也就是inactive过低会选择回收active anon 页，从而引起swap。根因在于业务内存访问过于频繁，active LRU链表上堆积了过多页。
+ ## 16） 4.18内核当容器还有page cache的情况下为什么会收缩active anon LRU页，导致active anon 页降级到inative anon
+ 4.18内核在inactive和active内存极端不平衡的情况下，也就是inactive过低会选择active anon 页降级到inative anon LRU，。根因在于业务内存访问过于频繁，active LRU链表上堆积了过多页。
  ```
  2513 /*
 2514  * This is a basic per-node page freer.  Used by both kswapd and direct reclaim.
