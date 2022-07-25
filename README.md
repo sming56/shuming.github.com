@@ -6,7 +6,7 @@
 
 ## 2) LRU_ACTIVE和LRU_INACTIVE list大小平衡算法
 inactive_list_is_low()
-4.18内核在inactive 和 active page(无论是file lru 还是anon lru), 比例严重失调时回导致系统回收anon page，也就是会swap，尽管当时file lru还有大量的内存页。
+4.18内核在inactive 和 active page(无论是file lru 还是anon lru), 比例严重失调时会导致系统把active anon page降级到inactive anon page，尽管当时file lru还有大量的内存页。
 ```
 2204 /*
 2205  * The inactive anon list should be small enough that the VM never has
