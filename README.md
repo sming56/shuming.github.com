@@ -2,7 +2,7 @@
 
 ## 1) workingset_refault算法
  workingset.c文件
- workingset集合表示的是当前正在使用的物理页面合集，可以理解为inactive+active list页面总和。算法如果发现一个被认为是workingset中的页面被移出lru链表后，在很短的时间中又被访问，说明该页是被错误移除链表，所以下次被访问时可以直接放到active lru list而不是inactive list。这样做，相当于是延长了该页的老化时间，因为算法认为该页会频繁访问需要提高它在lru链表中的时间
+ workingset集合表示的是当前正在使用的物理页面合集，可以理解为inactive+active list页面总和。算法如果发现一个被认为是workingset中的页面被移出lru链表后，在很短的时间中又被访问，说明该页是被错误移出，所以被访问后可以直接放入到active lru list而不是inactive list。这样做，相当于是延长了该页的老化时间，因为算法认为该页会频繁访问需要提高它在lru链表中的时间
 
 ## 2) LRU_ACTIVE和LRU_INACTIVE list大小平衡算法
 inactive_list_is_low()
