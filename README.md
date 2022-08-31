@@ -735,6 +735,48 @@ try_charge() {
 [20148497.800391] Memory cgroup out of memory: Killed process 7093 (java) total-vm:11451920kB, anon-rss:1968776kB, file-rss:0kB, shmem-rss:16356kB
 [20148497.993482] oom_reaper: reaped process 7093 (java), now anon-rss:0kB, file-rss:0kB, shmem-rss:0kB
 ```
+类似的还有
+`2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.618597] Hardware name: Inspur SA5212M5/YZMB-00882-104, BIOS 4.1.21 10/11/2021
+2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.619384] Call Trace:
+2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.620148]  dump_stack+0x5c/0x80
+2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.620802]  dump_header+0x6e/0x27a
+2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.621440]  ? try_to_free_pages+0xe8/0x1c0
+2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.622064]  oom_kill_process.cold.29+0xb/0x10
+2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.622734]  out_of_memory+0x1ba/0x4b0
+2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.623428]  __alloc_pages_slowpath+0xc0d/0xce0
+2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.624108]  __alloc_pages_nodemask+0x245/0x280
+2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.624744]  filemap_fault+0x3d8/0x860
+2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.625313]  ? alloc_set_pte+0x203/0x480
+2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.625885]  ? filemap_map_pages+0x1ed/0x3a0
+2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.626534]  ext4_filemap_fault+0x2c/0x40 [ext4]
+2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.627158]  __do_fault+0x38/0xc0
+2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.627765]  do_fault+0x18d/0x3e0
+2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.628357]  __handle_mm_fault+0x539/0x6b0
+2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.628936]  handle_mm_fault+0xda/0x200
+2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.629502]  __do_page_fault+0x22b/0x4e0
+2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.630053]  do_page_fault+0x32/0x110
+2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.630589]  ? page_fault+0x8/0x30
+2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.631108]  page_fault+0x1e/0x30
+2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.631640] RIP: 0033:0x40b220
+2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.632133] Code: Bad RIP value.
+2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.632607] RSP: 002b:000000c0000d3f28 EFLAGS: 00010246
+2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.633072] RAX: 0000000000e85878 RBX: 000000c0000c4000 RCX: 0000000000002632
+2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.633530] RDX: 0000000000000038 RSI: 000000c0000d3f00 RDI: 0000074071bb206c
+2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.634003] RBP: 000000c0000d3f88 R08: 00000000000004d6 R09: 0000000000000000
+2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.634477] R10: 000dc656cf1c15dc R11: 0000000000000001 R12: 000000c0000d3f10
+2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.634936] R13: 000000c0000c4000 R14: 000000c0000004e0 R15: 00007f22fa86e034
+2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.635392] Mem-Info:
+2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.635833] active_anon:38420613 inactive_anon:3096251 isolated_anon:0
+2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.635833]  active_file:1531 inactive_file:3264 isolated_file:211
+2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.635833]  unevictable:75631 dirty:0 writeback:16 unstable:0
+2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.635833]  slab_reclaimable:327112 slab_unreclaimable:709385
+2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.635833]  mapped:10677 shmem:5459716 pagetables:147945 bounce:0
+2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.635833]  free:119823 free_pcp:1235 free_cma:0
+2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.638548] Node 0 active_anon:82230420kB inactive_anon:7540028kB active_file:3344kB inactive_file:8608kB unevictable:299828kB isolated(anon):128kB isolated(file):692kB mapped:35548kB dirty:0kB writeback:64kB shmem:21828032kB shmem_thp: 0kB shmem_pmdmapped: 0kB anon_thp: 94208kB writeback_tmp:0kB unstable:0kB all_unreclaimable?``
+2022-08-29 12:48:06 zf-hulk-k8s-node9788 kernel: [16727300.640013] Node 1 active_anon:71452072kB inactive_anon:4845392kB active_file:2620kB inactive_file:4588kB unevictable:2696kB isolated(anon):0kB isolated(file):220kB mapped:9036kB dirty:0kB writeback:0kB shmem:10832kB shmem_thp: 0kB shmem_pmdmapped: 0kB anon_thp: 2048kB writeback_tmp:0kB unstable:0kB all_unreclaimable? no
+2022-08-29 12:48:06 zf-hulk-k8s-node9788 kernel: [16727300.748486] oom_reaper: reaped process 159440 (node_exporter), now anon-rss:0kB, file-rss:0kB, shmem-rss:0kB
+
+```
 
 #### 第二种case shmem
 ```
