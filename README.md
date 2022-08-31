@@ -736,7 +736,8 @@ try_charge() {
 [20148497.993482] oom_reaper: reaped process 7093 (java), now anon-rss:0kB, file-rss:0kB, shmem-rss:0kB
 ```
 类似的还有
-`2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.618597] Hardware name: Inspur SA5212M5/YZMB-00882-104, BIOS 4.1.21 10/11/2021
+```
+2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.618597] Hardware name: Inspur SA5212M5/YZMB-00882-104, BIOS 4.1.21 10/11/2021
 2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.619384] Call Trace:
 2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.620148]  dump_stack+0x5c/0x80
 2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.620802]  dump_header+0x6e/0x27a
@@ -775,7 +776,6 @@ try_charge() {
 2022-08-29 12:47:59 zf-hulk-k8s-node9788 kernel: [16727300.638548] Node 0 active_anon:82230420kB inactive_anon:7540028kB active_file:3344kB inactive_file:8608kB unevictable:299828kB isolated(anon):128kB isolated(file):692kB mapped:35548kB dirty:0kB writeback:64kB shmem:21828032kB shmem_thp: 0kB shmem_pmdmapped: 0kB anon_thp: 94208kB writeback_tmp:0kB unstable:0kB all_unreclaimable?``
 2022-08-29 12:48:06 zf-hulk-k8s-node9788 kernel: [16727300.640013] Node 1 active_anon:71452072kB inactive_anon:4845392kB active_file:2620kB inactive_file:4588kB unevictable:2696kB isolated(anon):0kB isolated(file):220kB mapped:9036kB dirty:0kB writeback:0kB shmem:10832kB shmem_thp: 0kB shmem_pmdmapped: 0kB anon_thp: 2048kB writeback_tmp:0kB unstable:0kB all_unreclaimable? no
 2022-08-29 12:48:06 zf-hulk-k8s-node9788 kernel: [16727300.748486] oom_reaper: reaped process 159440 (node_exporter), now anon-rss:0kB, file-rss:0kB, shmem-rss:0kB
-
 ```
 
 #### 第二种case shmem
