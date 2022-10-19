@@ -1453,6 +1453,73 @@ do_page_fault()--->__do_fault()--->ext4_filemap_fault()--->filemap_fault()--->ad
  ```
  3.10内核直接内存回收的时候，业务子容器charge内存时会同时charge父内存，如果子容器没到上限而父容器正好到上限了，会导致父容器回收内存，因为业务子容器内存使用包含在父容器之下，所以父容器大概率回收得还是业务子容器内存，但是pg_scan和pg_reclaim计数只算在父容器上，而没有算在子容器上，
  // 3.10内核
+ 2511 static int mem_cgroup_do_charge(struct mem_cgroup *memcg, gfp_t gfp_mask,
+2512 >------->------->------->-------unsigned int nr_pages, unsigned int min_pages,
+2513 >------->------->------->-------bool invoke_oom)
+2514 {
+2515 >-------struct mem_cgroup *mem_over_limit;
+2516 >-------struct page_counter *counter;
+2517 >-------unsigned long flags = 0;
+2518 >-------int ret;
+2519 
+2520 >-------ret = page_counter_try_charge(&memcg->memory, nr_pages, &counter); 《---如果子容器没有超内存限制，但是父容器超内存限制，counter返回的是父容器counter, 函数返回值为负数
+2521 
+2522 >-------if (likely(!ret)) {
+2523 >------->-------if (!do_swap_account)
+2524 >------->------->-------return CHARGE_OK;
+2525 >------->-------ret = page_counter_try_charge(&memcg->memsw, nr_pages, &counter);
+2526 >------->-------if (likely(!ret))
+2527 >------->------->-------return CHARGE_OK;
+2528 
+2529 >------->-------page_counter_uncharge(&memcg->memory, nr_pages);
+2530 >------->-------mem_over_limit = mem_cgroup_from_counter(counter, memsw);
+2531 >------->-------flags |= MEM_CGROUP_RECLAIM_NOSWAP;
+2532 >-------} else <---函数返回值为负数，走到这个分支
+2533 >------->-------mem_over_limit = mem_cgroup_from_counter(counter, memory);
+2534 >-------/*
+2535 >------- * Never reclaim on behalf of optional batching, retry with a
+2536 >------- * single page instead.
+2537 >------- */
+2538 >-------if (nr_pages > min_pages)
+2539 >------->-------return CHARGE_RETRY;
+2540 
+2541 >-------if (!(gfp_mask & __GFP_WAIT))
+2542 >------->-------return CHARGE_WOULDBLOCK;
+2543 
+2544 >-------if (gfp_mask & __GFP_NORETRY)
+2545 >------->-------return CHARGE_NOMEM;
+2546 
+2547 >-------ret = mem_cgroup_reclaim(mem_over_limit, gfp_mask, flags);
+2548 >-------if (mem_cgroup_margin(mem_over_limit) >= nr_pages)
+2549 >------->-------return CHARGE_RETRY;
+2550 >-------/*
+2551 >------- * Even though the limit is exceeded at this point, reclaim
+2552 >------- * may have been able to free some pages.  Retry the charge
+2553 >------- * before killing the task.
+2554 >------- *
+2555 >------- * Only for regular pages, though: huge pages are rather
+2556 >------- * unlikely to succeed so close to the limit, and we fall back
+2557 >------- * to regular pages anyway in case of failure.
+2558 >------- */
+2559 >-------if (nr_pages <= (1 << PAGE_ALLOC_COSTLY_ORDER) && ret)
+2560 >------->-------return CHARGE_RETRY;
+2561 
+2562 >-------/*
+2563 >------- * At task move, charge accounts can be doubly counted. So, it's
+2564 >------- * better to wait until the end of task_move if something is going on.
+2565 >------- */
+2566 >-------if (mem_cgroup_wait_acct_move(mem_over_limit))
+2567 >------->-------return CHARGE_RETRY;
+2568 
+2569 >-------if (invoke_oom)
+2570 >------->-------mem_cgroup_oom(mem_over_limit, gfp_mask,
+2571 >------->------->-------       get_order(nr_pages * PAGE_SIZE));
+2572 
+2573 >-------return CHARGE_NOMEM;
+2574 }
+2575 
+
+ 
 67 int page_counter_try_charge(struct page_counter *counter,
  68 >------->------->-------    unsigned long nr_pages,
  69 >------->------->-------    struct page_counter **fail)
@@ -1483,7 +1550,7 @@ do_page_fault()--->__do_fault()--->ext4_filemap_fault()--->filemap_fault()--->ad
  94 >------->------->------- * inaccuracy in the failcnt.
  95 >------->------->------- */
  96 >------->------->-------c->failcnt++;
- 97 >------->------->-------*fail = c;
+ 97 >------->------->-------*fail = c; <---如果父容器超内存限制了，fail返回得是父容器counter
  98 >------->------->-------goto failed;
  99 >------->-------}
 100 >------->-------/*
@@ -1499,7 +1566,7 @@ do_page_fault()--->__do_fault()--->ext4_filemap_fault()--->filemap_fault()--->ad
 110 >-------for (c = counter; c != *fail; c = c->parent)
 111 >------->-------page_counter_cancel(c, nr_pages);
 112 
-113 >-------return -ENOMEM;
+113 >-------return -ENOMEM; <---父容器超内存限制了，返回负数
 114 }
 
  
