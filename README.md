@@ -1475,7 +1475,7 @@ do_page_fault()--->__do_fault()--->ext4_filemap_fault()--->filemap_fault()--->ad
 2530 >------->-------mem_over_limit = mem_cgroup_from_counter(counter, memsw);
 2531 >------->-------flags |= MEM_CGROUP_RECLAIM_NOSWAP;
 2532 >-------} else <---函数返回值为负数，走到这个分支
-2533 >------->-------mem_over_limit = mem_cgroup_from_counter(counter, memory);
+2533 >------->-------mem_over_limit = mem_cgroup_from_counter(counter, memory); 《--- mem_over_limit赋值为超内存限制父容器
 2534 >-------/*
 2535 >------- * Never reclaim on behalf of optional batching, retry with a
 2536 >------- * single page instead.
@@ -1489,7 +1489,7 @@ do_page_fault()--->__do_fault()--->ext4_filemap_fault()--->filemap_fault()--->ad
 2544 >-------if (gfp_mask & __GFP_NORETRY)
 2545 >------->-------return CHARGE_NOMEM;
 2546 
-2547 >-------ret = mem_cgroup_reclaim(mem_over_limit, gfp_mask, flags);
+2547 >-------ret = mem_cgroup_reclaim(mem_over_limit, gfp_mask, flags); 《---父容器开始直接内存回收，pg_scan和pg_reclaim都记在父容器上，虽然可能回收得是子容器内存
 2548 >-------if (mem_cgroup_margin(mem_over_limit) >= nr_pages)
 2549 >------->-------return CHARGE_RETRY;
 2550 >-------/*
@@ -1518,7 +1518,7 @@ do_page_fault()--->__do_fault()--->ext4_filemap_fault()--->filemap_fault()--->ad
 2573 >-------return CHARGE_NOMEM;
 2574 }
 2575 
-
+// 3.10内核
  
 67 int page_counter_try_charge(struct page_counter *counter,
  68 >------->------->-------    unsigned long nr_pages,
@@ -1569,8 +1569,181 @@ do_page_fault()--->__do_fault()--->ext4_filemap_fault()--->filemap_fault()--->ad
 113 >-------return -ENOMEM; <---父容器超内存限制了，返回负数
 114 }
 
+4.18内核//
+2300 static int try_charge(struct mem_cgroup *memcg, gfp_t gfp_mask,
+2301 >------->-------      unsigned int nr_pages)
+2302 {
+2303 >-------unsigned int batch = max(MEMCG_CHARGE_BATCH, nr_pages);
+2304 >-------int nr_retries = MEM_CGROUP_RECLAIM_RETRIES;
+2305 >-------struct mem_cgroup *mem_over_limit;
+2306 >-------struct page_counter *counter;
+2307 >-------unsigned long nr_reclaimed;
+2308 >-------bool may_swap = true;
+2309 >-------bool drained = false;
+2310 >-------bool oomed = false;
+2311 >-------enum oom_status oom_status;
+2312 
+2313 >-------if (mem_cgroup_is_root(memcg))
+2314 >------->-------return 0;
+2315 retry:
+2316 >-------if (consume_stock(memcg, nr_pages))
+2317 >------->-------return 0;
+2318 
+2319 >-------if (!do_memsw_account() ||
+2320 >-------    page_counter_try_charge(&memcg->memsw, batch, &counter)) { 《---如果子容器没有超内存限制，但是父容器超内存限制，counter返回的是父容器counter, 函数返回值为负数
+2321 >------->-------if (page_counter_try_charge(&memcg->memory, batch, &counter))
+2322 >------->------->-------goto done_restock;
+2323 >------->-------if (do_memsw_account())
+2324 >------->------->-------page_counter_uncharge(&memcg->memsw, batch);
+2325 >------->-------mem_over_limit = mem_cgroup_from_counter(counter, memory); 《--- mem_over_limit赋值为超内存限制父容器
+2326 >-------} else {
+2327 >------->-------mem_over_limit = mem_cgroup_from_counter(counter, memsw);
+2328 >------->-------may_swap = false;
+2329 >-------}
+2330 
+2331 >-------if (batch > nr_pages) {
+2332 >------->-------batch = nr_pages;
+2333 >------->-------goto retry;
+2334 >-------}
+2335 
+2336 >-------/*
+2337 >------- * Unlike in global OOM situations, memcg is not in a physical
+2338 >------- * memory shortage.  Allow dying and OOM-killed tasks to
+2339 >------- * bypass the last charges so that they can exit quickly and
+2340 >------- * free their memory.
+2341 >------- */
+2342 >-------if (unlikely(tsk_is_oom_victim(current) ||
+2343 >------->-------     fatal_signal_pending(current) ||
+2344 >------->-------     current->flags & PF_EXITING))
+2345 >------->-------goto force;
+2346 
+2347 >-------/*
+2348 >------- * Prevent unbounded recursion when reclaim operations need to
+2349 >------- * allocate memory. This might exceed the limits temporarily,
+2350 >------- * but we prefer facilitating memory reclaim and getting back
+2351 >------- * under the limit over triggering OOM kills in these cases.
+2352 >------- */
+2353 >-------if (unlikely(current->flags & PF_MEMALLOC))
+2354 >------->-------goto force;
+2355 
+2356 >-------if (unlikely(task_in_memcg_oom(current)))
+2357 >------->-------goto nomem;
+2358 
+2359 >-------if (!gfpflags_allow_blocking(gfp_mask))
+2360 >------->-------goto nomem;
+2361 
+2362 >-------memcg_memory_event(mem_over_limit, MEMCG_MAX);
+2363 
+2364 >-------nr_reclaimed = try_to_free_mem_cgroup_pages(mem_over_limit, nr_pages,
+2365 >------->------->------->------->------->-------    gfp_mask, may_swap); 《---父容器开始直接内存回收，pg_scan和pg_reclaim都记在父容器上，虽然可能回收得是子容器内存
+2366 
+2367 >-------if (mem_cgroup_margin(mem_over_limit) >= nr_pages)
+2368 >------->-------goto retry;
+2369 
+2370 >-------if (!drained) {
+2371 >------->-------drain_all_stock(mem_over_limit);
+2372 >------->-------drained = true;
+2373 >------->-------goto retry;
+2374 >-------}
+2375 
+2376 >-------if (gfp_mask & __GFP_NORETRY)
+2377 >------->-------goto nomem;
+2378 >-------/*
+2379 >------- * Even though the limit is exceeded at this point, reclaim
+2380 >------- * may have been able to free some pages.  Retry the charge
+2381 >------- * before killing the task.
+2382 >------- *
+2383 >------- * Only for regular pages, though: huge pages are rather
+2384 >------- * unlikely to succeed so close to the limit, and we fall back
+2385 >------- * to regular pages anyway in case of failure.
+2386 >------- */
+2387 >-------if (nr_reclaimed && nr_pages <= (1 << PAGE_ALLOC_COSTLY_ORDER))
+2388 >------->-------goto retry;
+2389 >-------/*
+2390 >------- * At task move, charge accounts can be doubly counted. So, it's
+2391 >------- * better to wait until the end of task_move if something is going on.
+2392 >------- */
+2393 >-------if (mem_cgroup_wait_acct_move(mem_over_limit))
+2394 >------->-------goto retry;
+2395 
+2396 >-------if (nr_retries--)
+2397 >------->-------goto retry;
+2398 
+2399 >-------if (gfp_mask & __GFP_RETRY_MAYFAIL && oomed)
+2400 >------->-------goto nomem;
+2401 
+2402 >-------if (gfp_mask & __GFP_NOFAIL)
+2403 >------->-------goto force;
+2404 
+2405 >-------if (fatal_signal_pending(current))
+2406 >------->-------goto force;
+2407 
+2408 >-------/*
+2409 >------- * keep retrying as long as the memcg oom killer is able to make
+2410 >------- * a forward progress or bypass the charge if the oom killer
+2411 >------- * couldn't make any progress.
+2412 >------- */
+2413 >-------oom_status = mem_cgroup_oom(mem_over_limit, gfp_mask,
+2414 >------->-------       get_order(nr_pages * PAGE_SIZE));
+2415 >-------switch (oom_status) {
+2416 >-------case OOM_SUCCESS:
+2417 >------->-------nr_retries = MEM_CGROUP_RECLAIM_RETRIES;
+2418 >------->-------oomed = true;
+2419 >------->-------goto retry;
+2420 >-------case OOM_FAILED:
+2421 >------->-------goto force;
+2422 >-------default:
+2423 >------->-------goto nomem;
+2424 >-------}
+2425 nomem:
+2426 >-------if (!(gfp_mask & __GFP_NOFAIL))
+2427 >------->-------return -ENOMEM;
+2428 force:
+2429 >-------/*
+2430 >------- * The allocation either can't fail or will lead to more memory
+2431 >------- * being freed very soon.  Allow memory usage go over the limit
+2432 >------- * temporarily by force charging it.
+2433 >------- */
+2434 >-------page_counter_charge(&memcg->memory, nr_pages);
+2435 >-------if (do_memsw_account())
+2436 >------->-------page_counter_charge(&memcg->memsw, nr_pages);
+2437 >-------css_get_many(&memcg->css, nr_pages);
+2438 
+2439 >-------return 0;
+2440 
+2441 done_restock:
+2442 >-------css_get_many(&memcg->css, batch);
+2443 >-------if (batch > nr_pages)
+2444 >------->-------refill_stock(memcg, batch - nr_pages);
+2445 
+2446 >-------/*
+2447 >------- * If the hierarchy is above the normal consumption range, schedule
+2448 >------- * reclaim on returning to userland.  We can perform reclaim here
+2449 >------- * if __GFP_RECLAIM but let's always punt for simplicity and so that
+2450 >------- * GFP_KERNEL can consistently be used during reclaim.  @memcg is
+2451 >------- * not recorded as it most likely matches current's and won't
+2452 >------- * change in the meantime.  As high limit is checked again before
+2453 >------- * reclaim, the cost of mismatch is negligible.
+2454 >------- */
+2455 >-------do {
+2456 >------->-------if (page_counter_read(&memcg->memory) > memcg->high) {
+2457 >------->------->-------/* Don't bother a random interrupted task */
+2458 >------->------->-------if (in_interrupt()) {
+2459 >------->------->------->-------schedule_work(&memcg->high_work);
+2460 >------->------->------->-------break;
+2461 >------->------->-------}
+2462 >------->------->-------current->memcg_nr_pages_over_high += batch;
+2463 >------->------->-------set_notify_resume(current);
+2464 >------->------->-------break;
+2465 >------->-------}
+2466 >-------} while ((memcg = parent_mem_cgroup(memcg)));
+2467 
+2468 >-------return 0;
+2469 }
+
+
  
- // 4.18内核看起来已经修复了这个问题。
+ // 4.18内核page_counter_try_charge()逻辑和3.10类似
   99 bool page_counter_try_charge(struct page_counter *counter,
 100 >------->------->-------     unsigned long nr_pages,
 101 >------->------->-------     struct page_counter **fail)
