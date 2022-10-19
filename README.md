@@ -1399,6 +1399,8 @@ do_page_fault()--->__do_fault()--->ext4_filemap_fault()--->filemap_fault()--->ad
  ## 16） 4.18内核当容器还有page cache的情况下为什么会收缩active anon LRU页，导致active anon 页降级到inative anon
  4.18内核在inactive和active内存极端不平衡的情况下，也就是inactive过低会选择active anon 页降级到inactive anon LRU，这个算法似乎是对workingset_refault算法的一种修正。根因在于业务内存访问过于频繁，active LRU链表上堆积了过多页。
  ```
+
+2513 /*
  2513 /*
 2514  * This is a basic per-node page freer.  Used by both kswapd and direct reclaim.
 2515  */
@@ -1449,6 +1451,111 @@ do_page_fault()--->__do_fault()--->ext4_filemap_fault()--->filemap_fault()--->ad
  ## 17） docker，业务容器,pause容器和父容器内存回收关系
  ### 子容器和父容器内存使用有差距
  ```
- 直接内存回收的时候，业务子容器charge内存时会同时charge父内存，如果子容器没到上限而父容器正好到上限了，会导致父容器回收内存，因为业务子容器内存使用包含在父容器之下，所以父容器大概率回收得还是业务子容器内存，但是pg_scan和pg_reclaim计数只算在父容器上，而没有算在子容器上，
+ 3.10内核直接内存回收的时候，业务子容器charge内存时会同时charge父内存，如果子容器没到上限而父容器正好到上限了，会导致父容器回收内存，因为业务子容器内存使用包含在父容器之下，所以父容器大概率回收得还是业务子容器内存，但是pg_scan和pg_reclaim计数只算在父容器上，而没有算在子容器上，
+ // 3.10内核
+67 int page_counter_try_charge(struct page_counter *counter,
+ 68 >------->------->-------    unsigned long nr_pages,
+ 69 >------->------->-------    struct page_counter **fail)
+ 70 {
+ 71 >-------struct page_counter *c;
+ 72 
+ 73 >-------for (c = counter; c; c = c->parent) {
+ 74 >------->-------long new;
+ 75 >------->-------/*
+ 76 >------->------- * Charge speculatively to avoid an expensive CAS.  If
+ 77 >------->------- * a bigger charge fails, it might falsely lock out a
+ 78 >------->------- * racing smaller charge and send it into reclaim
+ 79 >------->------- * early, but the error is limited to the difference
+ 80 >------->------- * between the two sizes, which is less than 2M/4M in
+ 81 >------->------- * case of a THP locking out a regular page charge.
+ 82 >------->------- *
+ 83 >------->------- * The atomic_long_add_return() implies a full memory
+ 84 >------->------- * barrier between incrementing the count and reading
+ 85 >------->------- * the limit.  When racing with page_counter_limit(),
+ 86 >------->------- * we either see the new limit or the setter sees the
+ 87 >------->------- * counter has changed and retries.
+ 88 >------->------- */
+ 89 >------->-------new = atomic_long_add_return(nr_pages, &c->count);
+ 90 >------->-------if (new > c->limit) {
+ 91 >------->------->-------atomic_long_sub(nr_pages, &c->count);
+ 92 >------->------->-------/*
+ 93 >------->------->------- * This is racy, but we can live with some
+ 94 >------->------->------- * inaccuracy in the failcnt.
+ 95 >------->------->------- */
+ 96 >------->------->-------c->failcnt++;
+ 97 >------->------->-------*fail = c;
+ 98 >------->------->-------goto failed;
+ 99 >------->-------}
+100 >------->-------/*
+101 >------->------- * Just like with failcnt, we can live with some
+102 >------->------- * inaccuracy in the watermark.
+103 >------->------- */
+104 >------->-------if (new > c->watermark)
+105 >------->------->-------c->watermark = new;
+106 >-------}
+107 >-------return 0;
+108 
+109 failed:
+110 >-------for (c = counter; c != *fail; c = c->parent)
+111 >------->-------page_counter_cancel(c, nr_pages);
+112 
+113 >-------return -ENOMEM;
+114 }
+
+ 
+ // 4.18内核看起来已经修复了这个问题。
+  99 bool page_counter_try_charge(struct page_counter *counter,
+100 >------->------->-------     unsigned long nr_pages,
+101 >------->------->-------     struct page_counter **fail)
+102 {
+103 >-------struct page_counter *c;
+104 
+105 >-------for (c = counter; c; c = c->parent) {
+106 >------->-------long new;
+107 >------->-------/*
+108 >------->------- * Charge speculatively to avoid an expensive CAS.  If
+109 >------->------- * a bigger charge fails, it might falsely lock out a
+110 >------->------- * racing smaller charge and send it into reclaim
+111 >------->------- * early, but the error is limited to the difference
+112 >------->------- * between the two sizes, which is less than 2M/4M in
+113 >------->------- * case of a THP locking out a regular page charge.
+114 >------->------- *
+115 >------->------- * The atomic_long_add_return() implies a full memory
+116 >------->------- * barrier between incrementing the count and reading
+117 >------->------- * the limit.  When racing with page_counter_limit(),
+118 >------->------- * we either see the new limit or the setter sees the
+119 >------->------- * counter has changed and retries.
+120 >------->------- */
+121 >------->-------new = atomic_long_add_return(nr_pages, &c->usage);
+122 >------->-------if (new > c->max) {
+123 >------->------->-------atomic_long_sub(nr_pages, &c->usage);
+124 >------->------->-------propagate_protected_usage(counter, new);
+125 >------->------->-------/*
+126 >------->------->------- * This is racy, but we can live with some
+127 >------->------->------- * inaccuracy in the failcnt.
+128 >------->------->------- */
+129 >------->------->-------c->failcnt++;
+130 >------->------->-------*fail = c;
+131 >------->------->-------goto failed;
+132 >------->-------}
+133 >------->-------propagate_protected_usage(counter, new); <---增加了一行
+134 >------->-------/*
+135 >------->------- * Just like with failcnt, we can live with some
+136 >------->------- * inaccuracy in the watermark.
+137 >------->------- */
+138 >------->-------if (new > c->watermark)
+139 >------->------->-------c->watermark = new;
+140 >-------}
+141 >-------return true;
+142 
+143 failed:
+144 >-------for (c = counter; c != *fail; c = c->parent)
+145 >------->-------page_counter_cancel(c, nr_pages);
+146 
+147 >-------return false;
+148 }
+
+ 
+ 
  ```
  
