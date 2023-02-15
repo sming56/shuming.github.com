@@ -1,4 +1,4 @@
-#crash工具用法
+# crash工具用法
 
 ## 如何用crash打印结构里的可变数组
 ```
@@ -50,8 +50,8 @@ $6 = {
 
 crash> 
 
-##Redhat crash如何找到引发 D进程得根因
-###如何找到所有进程状态
+## Redhat crash如何找到引发 D进程得根因
+### 如何找到所有进程状态
 
 代码块
 crash> ps -S
@@ -119,7 +119,7 @@ PID: 25053  TASK: ffff885f776f2ab0  CPU: 5   COMMAND: "processx"
 330         down_write(&current->mm->mmap_sem);
     ...
 ```
-##参看文献：
+## 参看文献：
 https://access.redhat.com/solutions/3538691
 
 
