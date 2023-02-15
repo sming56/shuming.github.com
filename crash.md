@@ -1,4 +1,7 @@
-如何用crash打印结构里的可变数组
+#crash工具用法
+
+## 如何用crash打印结构里的可变数组
+```
 crash> struct pid
 
 struct pid {
@@ -47,8 +50,8 @@ $6 = {
 
 crash> 
 
-Redhat crash如何找到引发 D进程得根因
-如何找到所有进程状态
+##Redhat crash如何找到引发 D进程得根因
+###如何找到所有进程状态
 
 代码块
 crash> ps -S
@@ -65,8 +68,9 @@ crash> foreach UN bt | awk '/#2 /{print $3,$5}' | sort | uniq -c | sort -nr
      37 rwsem_down_read_failed ffffffff8154d966
       4 io_schedule_timeout ffffffff8154a11f
       2 rwsem_down_write_failed ffffffff8154d933
-如何找到处于D进程的最老的几个进程，大概率是触发问题的地方
-
+```
+###如何找到处于D进程的最老的几个进程，大概率是触发问题的地方
+```
 代码块
 crash> foreach UN ps -m | tail
 [ 3 13:06:10.433] [UN]  PID: 3156   TASK: ffff885f82042ab0  CPU: 6   COMMAND: "pidof"
@@ -79,8 +83,9 @@ crash> foreach UN ps -m | tail
 [ 4 19:19:46.360] [UN]  PID: 3030   TASK: ffff88bfab9c0040  CPU: 9   COMMAND: "processx"
 [ 4 19:47:36.825] [UN]  PID: 7631   TASK: ffff885fa5b19520  CPU: 4   COMMAND: "pim"
 [ 4 19:47:36.526] [UN]  PID: 25053  TASK: ffff885f776f2ab0  CPU: 5   COMMAND: "processx"
- 查看最老的那个进程
-
+```
+### 查看最老的那个进程
+```
 代码块
 crash> set 25053
     PID: 25053
@@ -113,7 +118,8 @@ PID: 25053  TASK: ffff885f776f2ab0  CPU: 5   COMMAND: "processx"
     ...
 330         down_write(&current->mm->mmap_sem);
     ...
-参看文献：
+```
+##参看文献：
 https://access.redhat.com/solutions/3538691
 
 
