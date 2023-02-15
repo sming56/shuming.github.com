@@ -1,3 +1,11 @@
 1) github仓库ssh访问key一定要加密码，并且用SSH agent
 https://docs.github.com/en/developers/overview/managing-deploy-keys
 2)github仓库Add deploy key后，显示出来的key和你加的不一样，可能是故意模糊明文
+3)
+[shuming02@xr-hulk-k8s-node1933 shuming]$ cat /home/shuming02/.ssh/config
+Host github.com <---no *.github.com!!!
+  AddKeysToAgent yes
+#  UseKeychain yes
+  IdentityFile ~/.ssh/id_sming56_github <---your private key
+  IgnoreUnknown UseKeychain
+[shuming02@xr-hulk-k8s-node1933 shuming]$
