@@ -469,5 +469,13 @@ crash> mod -t
 no tainted modules
 ```
 
+## 如何用crash搜进程栈上数据
+```
+crash> search -T ffff9a713c859a00 #搜active 进程栈 -t 包括不活跃进程栈
+PID: 45927  TASK: ffff9a6af28a9ec0  CPU: 39  COMMAND: "rg"
+ffffabeb605d3e48: ffff9a713c859a00 
+ffffabeb605d3ea8: ffff9a713c859a00 
+ffffabeb605d3ed8: ffff9a713c859a00 
+```
 
 
