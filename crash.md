@@ -477,5 +477,9 @@ ffffabeb605d3e48: ffff9a713c859a00
 ffffabeb605d3ea8: ffff9a713c859a00 
 ffffabeb605d3ed8: ffff9a713c859a00 
 ```
-
+## 如何打印一个list成员对应的结构
+```
+list 0xffff97a680231330 -l perf_cpu_context.cgrp_cpuctx_entry -s perf_cpu_context
+cgrp_cpuctx_entry是struct perf_cpu_context 的一个list成员
+```
 
