@@ -1077,6 +1077,7 @@ do_page_fault()--->__do_fault()--->ext4_filemap_fault()--->filemap_fault()--->ad
 ```
 ## 共享内存到底算page cache还是anon memory，共享内存(share memory)对memcg如何计数
 ```
+基本结论：共享内存算anon memory，所有非SwapBacked的page都是file cache。反之就是annon page
 1611 /*
 1612  * shmem_getpage_gfp - find page in cache, or get from swap, or allocate
 1613  *
