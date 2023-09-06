@@ -1,0 +1,47 @@
+#!/usr/bin/env bpftrace
+#
+#include <linux/time.h>
+#include <linux/pagemap.h>
+
+BEGIN
+{
+  printf("Tracing ondemand_readahead \n");
+}
+
+kprobe:ondemand_readahead
+{
+    @rac3 = (struct readahead_control *)arg1;
+
+    printf("ondemand_readahead comm = %s, index = %lld, nr_pages = %d, bach_count = %d ", comm, @rac3->_index, @rac3->_nr_pages, @rac3->_batch_count);
+    printf(" hit_readahead_marker = %d, req_count = %d\n", arg3, arg4);
+    print(kstack)
+}
+kprobe:do_page_cache_ra
+{
+    printf("do_page_cache_ra comm = %s, nr_to_read = %lld, ra_read = %lld \n", comm, arg2, arg3);
+    print(kstack)
+}
+kprobe:page_cache_ra_unbounded
+{
+   printf("page_cache_ra_unbounded comm = %s, nr_to_read = %lld, lookahead_size = %lld\n", comm, arg2, arg3);
+}
+kprobe:ext4_readahead
+{
+
+    @rac = (struct readahead_control *)arg1;
+
+    printf("ext4_readahead comm = %s, index = %lld, nr_pages = %d, bach_count = %d \n", comm, @rac->_index, @rac->_nr_pages, @rac->_batch_count);
+    print(kstack)
+}
+
+kprobe:page_cache_async_ra
+{
+    @rac4 = (struct readahead_control *)arg1;
+
+    printf("page_cache_async_ra comm = %s, index = %lld, nr_pages = %d, bach_count = %d ", comm, @rac4->_index, @rac4->_nr_pages, @rac4->_batch_count);
+    printf(" _req_count = %lld \n", arg4);
+    print(kstack)
+}
+END
+{
+}
