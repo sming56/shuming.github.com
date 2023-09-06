@@ -1281,7 +1281,7 @@ do_page_fault()--->__do_fault()--->ext4_filemap_fault()--->filemap_fault()--->ad
  20  */
  21 static inline int page_is_file_cache(struct page *page)
  22 {
- 23 >-------return !PageSwapBacked(page); <---所有非SwapBacked的page都是file cache。反之就是annon page， see  page_lru_base_type().另外还有一个函数，PageAnon（），是以mapping类型决定是否annon page。
+ 23 >-------return !PageSwapBacked(page); <---所有非SwapBacked的page都是file cache。反之就是annon page， see  page_lru_base_type().另外还有一个函数，PageAnon（），是以mapping类型决定是否annon page。因为SHMEM是没有Swap Backed得，所以SHMEM应该算成file cache
  24 }
  68 /**
  69  * page_lru_base_type - which LRU list type should a page be on?
@@ -1799,4 +1799,18 @@ do_page_fault()--->__do_fault()--->ext4_filemap_fault()--->filemap_fault()--->ad
  
  
  ```
+
+##容器SHMEM和Cached，USED关系
+```
+set10是个容器，容器规格为360G内存
+[root@set10 /]# free -h
+              total        used        free      shared  buff/cache   available
+Mem:           360G         85G        5.4G         20G        269G        258G
+Swap:            0B          0B          0B
+
+这里看到的shared内存实际上是宿主机的shared内存，因为没有做容器隔离。
+容器SHMEM大小 = buff/cache - available = 269G -258G = 11G. 这11G才是真正算在该容器上的内存
+total = used + free + buff/cache = 85 + 5.4 + 269 = 360
+
+```
  
