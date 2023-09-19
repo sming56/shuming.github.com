@@ -2,46 +2,196 @@
 #
 #include <linux/time.h>
 #include <linux/pagemap.h>
+#include <linux/mm_types.h>
 
 BEGIN
 {
+  if ($# != 1) {
+     print("USAGE: trace_cmd <pid>");
+     exit();
+  }
+
+  @in_ra_unbounded = 0;
+  @submitbio = 0;
   printf("Tracing ondemand_readahead \n");
 }
-
-kprobe:ondemand_readahead
+/*
+kprobe:workingset_refault
+/ @in_ra_unbounded == 1 /
 {
-    @rac3 = (struct readahead_control *)arg1;
-
-    printf("ondemand_readahead comm = %s, index = %lld, nr_pages = %d, bach_count = %d ", comm, @rac3->_index, @rac3->_nr_pages, @rac3->_batch_count);
-    printf(" hit_readahead_marker = %d, req_count = %d\n", arg3, arg4);
+    printf("workingset_refault comm = %s, page = %p, shadow = %lx\n", comm, arg0, *arg1);
     print(kstack)
 }
-kprobe:do_page_cache_ra
+kprobe:__delete_from_page_cache
+/ @in_ra_unbounded == 1 /
 {
-    printf("do_page_cache_ra comm = %s, nr_to_read = %lld, ra_read = %lld \n", comm, arg2, arg3);
+    @page = (struct page*)arg0;
+
+    printf(" __delete_from_page_cache comm = %s,  page = %p, memcg_data = %lx, shadow = %lx\n", comm, @page, @page->memcg_data, *arg1);
     print(kstack)
 }
+
 kprobe:page_cache_ra_unbounded
 {
-   printf("page_cache_ra_unbounded comm = %s, nr_to_read = %lld, lookahead_size = %lld\n", comm, arg2, arg3);
+   @rac6 = (struct readahead_control *)arg0;   
+
+   @in_ra_unbounded = 1;
+
+   printf("page_cache_ra_unbounded comm = %s, nr_to_read = %lu, lookahead_size = %lu\n", comm, arg1, arg2);
+   printf("page_cache_ra_unbounded comm = %s, mapping->a_ops->readpages=%lx, mapping->a_ops->readpage=%lx, mapping->a_ops->readahead=%lx\n", comm, @rac6->mapping->a_ops->readpages, @rac6->mapping->a_ops->readpage, @rac6->mapping->a_ops->readahead);
 }
-kprobe:ext4_readahead
+
+kretprobe:page_cache_ra_unbounded
 {
+   @in_ra_unbounded = 0;
 
-    @rac = (struct readahead_control *)arg1;
-
-    printf("ext4_readahead comm = %s, index = %lld, nr_pages = %d, bach_count = %d \n", comm, @rac->_index, @rac->_nr_pages, @rac->_batch_count);
-    print(kstack)
+   printf("page_cache_ra_unbounded ret comm = %s \n", comm);
 }
-
-kprobe:page_cache_async_ra
+kretprobe:__page_cache_alloc
+/ @in_ra_unbounded == 1 /
 {
-    @rac4 = (struct readahead_control *)arg1;
-
-    printf("page_cache_async_ra comm = %s, index = %lld, nr_pages = %d, bach_count = %d ", comm, @rac4->_index, @rac4->_nr_pages, @rac4->_batch_count);
-    printf(" _req_count = %lld \n", arg4);
-    print(kstack)
+   printf("__page_cache_alloc comm = %s, retval = %lx\n", comm, retval);
 }
+
+kprobe:add_to_page_cache_lru
+/ @in_ra_unbounded == 1 /
+{
+   printf(" add_to_page_cache_lru comm = %s, page = %p\n", comm, arg0);
+}
+
+kretprobe:add_to_page_cache_lru
+/ @in_ra_unbounded == 1 /
+{
+   printf(" add_to_page_cache_lru comm = %s, retval = %d\n", comm, retval);
+}
+*/
+
+kprobe:submit_bio
+/ pid == $1 /
+{
+   @submitbio = 1;
+   @t_start[tid] = nsecs;
+}
+
+kretprobe:submit_bio
+/ @t_start[tid] && pid == $1 /
+{
+   @submitbio = 0;
+   @submitbio_dist = hist(nsecs - @t_start[tid]);
+   delete(@t_start[tid]);
+}
+
+kprobe:wait_on_page_bit_killable
+/pid == $1/
+{
+   @ns_wk[tid] = nsecs;
+}
+
+kretprobe:wait_on_page_bit_killable
+/pid == $1 &&  @ns_wk[tid]/
+{
+   @ns_wk_dist = hist(nsecs - @ns_wk[tid]);
+   delete(@ns_wk[tid]);
+}
+
+kprobe:generic_file_buffered_read_pagenotuptodate
+/pid == $1/
+{
+   @ns[tid] = nsecs;
+}
+
+kretprobe:generic_file_buffered_read_pagenotuptodate
+/@ns[tid] && pid == $1 /
+{
+   @ns_dist = hist(nsecs - @ns[tid]);
+   delete(@ns[tid]);
+}
+
+kprobe:generic_file_buffered_read_get_pages
+/pid == $1/
+{
+   @ns1[tid] = nsecs;
+}
+
+kretprobe:generic_file_buffered_read_get_pages
+/@ns1[tid] && pid == $1 /
+{
+   @ns1_dist = hist(nsecs - @ns1[tid]);
+   delete(@ns1[tid]);
+}
+
+kprobe:generic_file_buffered_read
+/pid == $1/
+{
+   @ns2[tid] = nsecs;
+}
+
+kretprobe:generic_file_buffered_read
+/@ns2[tid] && pid == $1 /
+{
+   @ns2_dist = hist(nsecs - @ns2[tid]);
+   delete(@ns2[tid]);
+}
+
+kprobe:generic_file_read_iter
+/pid == $1/
+{
+   @ns3[tid] = nsecs;
+}
+
+kretprobe:generic_file_read_iter
+/@ns3[tid] && pid == $1 /
+{
+   @ns3_dist = hist(nsecs - @ns3[tid]);
+   delete(@ns3[tid]);
+}
+
+kprobe:ext4_file_read_iter
+/pid == $1/
+{
+   @ns4[tid] = nsecs;
+}
+
+kretprobe:ext4_file_read_iter
+/@ns4[tid] && pid == $1 /
+{
+   @ns4_dist = hist(nsecs - @ns4[tid]);
+   delete(@ns4[tid]);
+}
+kprobe:vfs_read
+/pid == $1/
+{
+   @ns5[tid] = nsecs;
+}
+
+kretprobe:vfs_read
+/@ns5[tid] && pid == $1 /
+{
+   @ns5_dist = hist(nsecs - @ns5[tid]);
+   delete(@ns5[tid]);
+}
+
+interval:s:10
+{
+  print(@submitbio_dist);
+  print(@ns_wk_dist);
+  print(@ns_dist);
+  print(@ns1_dist);
+  print(@ns2_dist);
+  print(@ns3_dist);
+  print(@ns4_dist);
+  print(@ns5_dist);
+
+  clear(@submitbio_dist);
+  clear(@ns_wk_dist);
+  clear(@ns_dist);
+  clear(@ns1_dist);
+  clear(@ns2_dist);
+  clear(@ns3_dist);
+  clear(@ns4_dist);
+  clear(@ns5_dist);
+}
+
 END
 {
 }
