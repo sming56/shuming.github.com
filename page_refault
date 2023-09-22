@@ -1,0 +1,5 @@
+#Page refault 算法
+## 假设
+### 1）inactive/active page list长度到达一个动态平衡点，长度基本不变了
+### 2）基于reference计数的算法失效，某些inactive list的page比active list的page 近期更可能被访问
+### 3) 虽然page refault算法是基于物理页struct page实现得，但是counter得存储是存在基于radix tree的address mapping中，这个counter(shadow)索引是用struct page-->index，这个index对于page cache来说就是相对文件头的偏移量，对于内核地址来说就是对应的虚拟地址，所以page refault算法最终还是反映了虚拟地址页被访问的可能性。
