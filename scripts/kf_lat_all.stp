@@ -1,0 +1,22 @@
+global samples = 0
+global stats
+
+probe kernel.function(@1).return {
+    stats <<< gettimeofday_us() - @entry(gettimeofday_us())
+    samples = samples + 1
+}
+
+probe end {
+    if (@# != "1") {
+       printf("usage: stap <this script name> kernel_function_name\n")
+    }
+    printf("probing kernel function: %s", @1)
+    if (samples == 0) {
+        printf("No samples observed so far.\n");
+
+    } else {
+        printf("Distribution of %s latencies (in microseconds) for %d samples\n", @1, @count(stats))
+        printf("max/avg/min: %d/%d/%d\n", @max(stats), @avg(stats), @min(stats))
+        print(@hist_log(stats))
+    }
+}

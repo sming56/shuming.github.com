@@ -1,0 +1,23 @@
+#!/usr/bin/env bpftrace
+
+#include <linux/netdevice.h>
+#include <linux/skbuff.h>
+
+BEGIN
+{
+  printf("Tracing __dev_queue_xmit calls. \n");
+}
+kprobe:__dev_queue_xmit
+{
+   printf("skb->dev.name = %s sb_dev->name = %s \n", ((struct sk_buff *)arg0)->dev->name, ((struct net_device *)arg1)->name);
+   printf("%s\n", kstack());
+}
+kprobe:dev_hard_start_xmit
+{
+   printf("skb->dev.name = %s sb_dev->name = %s \n", ((struct sk_buff *)arg0)->dev->name, ((struct net_device *)arg1)->name);
+   printf("%s\n", kstack());
+}
+
+END
+{
+}

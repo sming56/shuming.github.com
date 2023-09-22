@@ -1,0 +1,24 @@
+global begin[10000]
+global samples = 0
+global stats
+probe kernel.function("__d_lookup").call {
+   begin[tid()] = gettimeofday_ns()
+}
+probe kernel.function("__d_lookup").return {
+   if (begin[tid()]>0) {
+      stats <<< gettimeofday_ns() - begin[tid()]
+      samples = samples + 1
+      begin[tid()] = 0
+   }
+}
+
+probe end {
+    if (samples == 0) {
+        printf("No samples observed so far.\n");
+
+    } else {
+        printf("Distribution of %s latencies (in nanoseconds) for %d samples\n", "__d_lookup", @count(stats))
+        printf("max/avg/min: %d/%d/%d\n", @max(stats), @avg(stats), @min(stats))
+        print(@hist_log(stats))
+    }
+}

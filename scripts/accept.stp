@@ -1,0 +1,6 @@
+#probe kernel.function("inet_csk_accept").return {
+#   printf("%s\n", $$return$$);
+#}
+probe kernel.function("ip_make_skb").call {
+    printf("%s\n", $$parms$$);
+}

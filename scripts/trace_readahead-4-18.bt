@@ -1,0 +1,38 @@
+#include <linux/time.h>
+#include <linux/fs.h>
+
+BEGIN
+{
+  printf("Tracing ondemand_readahead \n");
+}
+
+
+/* 4.18 */
+kprobe:ondemand_readahead
+{
+    @ra3 = (struct file_ra_state *)arg2;
+
+    printf("ondemand_readahead comm = %s, start = %lld, size = %d, async_size = %d, ra_pages = %d, mmap_miss = %x, prev_pos = %d ", comm, @ra3->start, @ra3->size, @ra3->async_size, @ra3->ra_pages, @ra3->mmap_miss, @ra3->prev_pos);
+    printf(" hit_readahead_marker = %d, req_count = %d\n", arg3, arg4);
+    print(kstack)
+}
+/* 4.18 */
+kprobe:ra_submit
+{
+    @ra4 = (struct file_ra_state *)arg1;
+    printf("ra_submit comm = %s, start = %lld, size = %d, async_size = %d, ra_pages = %d, mmap_miss = %x, prev_pos = %d ", comm, @ra4->start, @ra4->size, @ra4->async_size, @ra4->ra_pages, @ra4->mmap_miss, @ra4->prev_pos);
+    print(kstack)
+}
+kprobe:__do_page_cache_readahead
+{
+   printf("__do_page_cache_readahead comm = %s, offset = %lld, nr_to_read = %lld, lookahead_size = %lld\n", comm, arg3, arg4, arg5);
+   print(kstack)
+}
+kprobe:ext4_readpages
+{
+    printf("ext4_readpages comm = %s, nr_pages = %d \n", comm, arg4);
+    print(kstack)
+}
+END
+{
+}

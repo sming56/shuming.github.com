@@ -1,0 +1,7 @@
+global samples = 0
+probe kernel.function("task_tick_fair").call {
+   samples = samples + 1
+}
+probe end {
+   printf("%d samples observed so far.\n", samples);
+}

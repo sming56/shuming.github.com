@@ -1,0 +1,133 @@
+#!/usr/bin/env bpftrace
+#
+#include <linux/time.h>
+#include <linux/pagemap.h>
+
+BEGIN
+{
+  @in_ra_unbounded = 0;
+  printf("Tracing ondemand_readahead \n");
+}
+
+kprobe:ondemand_readahead
+{
+    @rac3 = (struct readahead_control *)arg0;
+
+    printf("ondemand_readahead comm = %s, index = %lu, nr_pages = %u, bach_count = %u ", comm, @rac3->_index, @rac3->_nr_pages, @rac3->_batch_count);
+    printf(" hit_readahead_marker = %d, req_count = %lu\n", arg2, arg3);
+    print(kstack)
+}
+kretprobe:ondemand_readahead
+{
+    print("ondemand_readahead return")
+}
+
+kprobe:do_page_cache_ra
+{
+    @rac5 = (struct readahead_control *)arg0;
+    printf("do_page_cache_ra comm = %s, nr_to_read = %lu, lookahead_size = %lu \n", comm, arg1, arg2);
+    printf("index = %lu, nr_pages = %u, bach_count = %u \n", @rac5->_index, @rac5->_nr_pages, @rac5->_batch_count);
+    print(kstack)
+}
+kretprobe:do_page_cache_ra
+{
+    print("do_page_cache_ra return")
+}
+kprobe:page_cache_ra_unbounded
+{
+   @rac6 = (struct readahead_control *)arg0;   
+
+   @in_ra_unbounded = 1;
+
+   printf("page_cache_ra_unbounded comm = %s, nr_to_read = %lu, lookahead_size = %lu\n", comm, arg1, arg2);
+   printf("page_cache_ra_unbounded comm = %s, mapping->a_ops->readpages=%lx, mapping->a_ops->readpage=%lx, mapping->a_ops->readahead=%lx\n", comm, @rac6->mapping->a_ops->readpages, @rac6->mapping->a_ops->readpage, @rac6->mapping->a_ops->readahead);
+}
+
+kretprobe:page_cache_ra_unbounded
+{
+   @in_ra_unbounded = 0;
+
+   printf("page_cache_ra_unbounded ret comm = %s \n", comm);
+}
+kretprobe:__page_cache_alloc
+/ @in_ra_unbounded == 1 /
+{
+   printf("__page_cache_alloc retval = %lx\n", retval);
+}
+
+kretprobe:add_to_page_cache_lru
+/ @in_ra_unbounded == 1 /
+{
+   printf(" add_to_page_cache_lru retval = %d\n", retval);
+}
+
+kprobe:ext4_mpage_readpages
+/ @in_ra_unbounded == 1 /
+{
+   print(kstack)
+}
+kretprobe:ext4_mpage_readpages
+/ @in_ra_unbounded == 1 /
+{
+   printf("comm = %s, ext4_mpage_readpages retval = %d\n", comm, retval);
+}
+
+kprobe:submit_bio
+/ @in_ra_unbounded == 1 /
+{
+   print(kstack)
+}
+
+kretprobe:submit_bio
+/ @in_ra_unbounded == 1 /
+{
+   printf("comm = %s,  submit_bio retval = %d\n", comm, retval);
+}
+
+kprobe:ext4_readahead
+/ @in_ra_unbounded == 1 /
+{
+
+    @rac = (struct readahead_control *)arg0;
+
+    printf("ext4_readahead comm = %s, index = %lu, nr_pages = %u, bach_count = %u \n", comm, @rac->_index, @rac->_nr_pages, @rac->_batch_count);
+    print(kstack)
+}
+kretprobe:ext4_readahead
+/ @in_ra_unbounded == 1 /
+{
+
+
+    print("ext4_readahead retrun");
+}
+
+kprobe:read_pages
+/ @in_ra_unbounded == 1 /
+{
+    @rac7 = (struct readahead_control *)arg0;
+
+    printf("read_pages skip_page = %d", arg2);
+    printf("read_pages comm = %s, mapping->a_ops->readpages=%s, mapping->a_ops->readpage=%s, mapping->a_ops->readahead=%s\n", comm, ksym(@rac7->mapping->a_ops->readpages), ksym(@rac7->mapping->a_ops->readpage), ksym(@rac7->mapping->a_ops->readahead));
+}
+
+kretprobe:read_pages
+/ @in_ra_unbounded == 1 /
+{
+   print("read_pages retrun");
+}
+kprobe:page_cache_async_ra
+{
+    @rac4 = (struct readahead_control *)arg0;
+
+    printf("page_cache_async_ra comm = %s, index = %lu, nr_pages = %u, bach_count = %u ", comm, @rac4->_index, @rac4->_nr_pages, @rac4->_batch_count);
+    printf(" _req_count = %lu \n", arg3);
+    print(kstack)
+}
+kretprobe:page_cache_async_ra
+{
+   print("page_cache_async_ra return");
+}
+
+END
+{
+}

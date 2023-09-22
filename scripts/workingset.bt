@@ -1,0 +1,54 @@
+#!/usr/bin/env bpftrace
+#
+#include <linux/time.h>
+#include <linux/pagemap.h>
+#include <linux/mm_types.h>
+
+BEGIN
+{
+  if ($# != 1) {
+     print("USAGE: trace_cmd <pid>");
+     exit();
+  }
+
+}
+kprobe:workingset_refault
+/pid == $1 && @in_read[tid]/
+{
+
+   @ns_ws[tid] = nsecs;
+}
+kretprobe:workingset_refault
+/ @ns_ws[tid] && pid == $1 && @in_read[tid]/
+{
+   @ns_ws_dist = hist(nsecs - @ns_ws[tid]);
+   delete(@ns_ws[tid]);
+}
+
+kprobe:vfs_read
+/pid == $1/
+{
+   @in_read[tid] = 1;
+   @ns_vfsr[tid] = nsecs;
+}
+kretprobe:vfs_read
+/ @ns_vfsr[tid] && pid == $1 /
+{
+   @ns_vfsr_dist = hist(nsecs - @ns_vfsr[tid]);
+   delete(@ns_vfsr[tid]);
+   @in_read[tid] = 0;
+}
+
+
+interval:s:10
+{
+  print(@ns_vfsr_dist);
+  print(@ns_ws_dist);
+
+  clear(@ns_vfsr_dist);
+  clear(@ns_ws_dist);
+}
+
+END
+{
+}

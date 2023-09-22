@@ -1,0 +1,31 @@
+[root@zf-hulk-k8s-node839 sankuai]# cat kf_lat.stp
+global begin[10000]
+global samples = 0
+global stats
+probe kernel.function(@1).call {
+   if (pid() == $2) {
+      begin[pid()] = gettimeofday_us()
+   }
+}
+probe kernel.function(@1).return {
+   if ((pid() == $2) && (begin[pid()] > 0)) {
+      stats <<< gettimeofday_us() - begin[pid()]
+      samples = samples + 1
+      begin[pid()] = 0
+   }
+}
+
+probe end {
+    if (@# != "2") {
+       printf("usage: stap <this script name> kernel_function_name pid\n")
+    }
+    printf("probing kernel function: %s", @1)
+    if (samples == 0) {
+        printf("No samples observed so far.\n");
+
+    } else {
+        printf("Distribution of %s latencies (in nanoseconds) for %d samples\n", "__d_lookup", @count(stats))
+        printf("max/avg/min: %d/%d/%d\n", @max(stats), @avg(stats), @min(stats))
+        print(@hist_log(stats))
+    }
+}
