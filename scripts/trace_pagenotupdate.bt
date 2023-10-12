@@ -1,0 +1,70 @@
+#!/usr/bin/env bpftrace
+#
+
+BEGIN
+{
+  if ($# != 1) {
+     print("USAGE: trace_cmd <pid>");
+     exit();
+  }
+}
+
+kprobe:generic_file_buffered_read_pagenotuptodate
+/pid == $1/
+{
+   @in_read_pagenotuptodate[tid] = 1;
+}
+
+kretprobe:generic_file_buffered_read_pagenotuptodate
+/@in_read_pagenotuptodate[tid] && pid == $1/
+{
+   if (retval) {
+      @pagenotuptodate_dist = lhist(1, 0, 1, 1);
+   } else {
+      @pagenotuptodate_dist = lhist(0, 0, 1, 1);
+   }
+   delete(@in_read_pagenotuptodate[tid]);
+}
+kprobe:find_get_pages_contig
+/@in_read_get_pages[tid] && pid == $1 /
+{
+}
+
+kretprobe:find_get_pages_contig
+/@in_read_get_pages[tid] && pid == $1 /
+{
+    @pages_contig_dist = hist(retval);
+}
+
+kprobe:generic_file_buffered_read_get_pages
+/pid == $1/
+{
+   @in_read_get_pages[tid] = 1;
+   @read_get_pages_nr_dist = hist(arg3);
+}
+
+kretprobe:generic_file_buffered_read_get_pages
+/@in_read_get_pages[tid] && pid == $1 /
+{
+   @read_get_pages_dist = hist(retval);
+   delete(@in_read_get_pages[tid]);
+}
+
+
+
+interval:s:5
+{
+  print(@read_get_pages_dist);
+  print(@pages_contig_dist);
+  print(@read_get_pages_nr_dist);
+  print(@pagenotuptodate_dist);
+  clear(@read_get_pages_dist);
+  clear(@pages_contig_dist);
+  clear(@read_get_pages_nr_dist);
+  clear(@pagenotuptodate_dist);
+}
+
+END
+{
+}
+
