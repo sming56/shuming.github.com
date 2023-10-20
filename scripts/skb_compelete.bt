@@ -1,0 +1,144 @@
+#!/usr/bin/env bpftrace
+#include <linux/skbuff.h>
+#include <linux/ip.h>
+#include <linux/udp.h>
+
+BEGIN
+{
+}
+kretprobe:__skb_checksum_complete
+/ @ip_rcv[tid] == 1 /
+{
+   @checksum = hist(retval);
+}
+kprobe:__skb_checksum_complete
+/ @ip_rcv[tid] == 1 /
+{
+  $skb = (struct sk_buff *)arg0;
+  if (($skb->ip_summed == CHECKSUM_COMPLETE ) && !$skb->csum_complete_sw) {
+     $data = $skb->head + $skb->mac_header; 
+     $iphdr = ($skb->head + $skb->network_header);
+     $ipheader = (struct iphdr *)($skb->head + $skb->network_header);
+     $transhdr = $skb->head + $skb->transport_header;
+     $transheader = (struct udphdr *)($skb->head + $skb->transport_header);
+     $version = $ipheader->version;
+     /*
+     printf("ipheader: ");
+     $headp = (uint8 *)$iphdr;
+     printf("%02x", *$headp);
+
+     $headp = (uint8 *)($iphdr + 1);
+     printf("%02x ", *$headp);
+
+     $headp = (uint8 *)($iphdr + 2);
+     printf("%02x", *$headp);
+
+     $headp = (uint8 *)($iphdr + 3);
+     printf("%02x ", *$headp);
+
+     $headp = (uint8 *)($iphdr + 4);
+     printf("%02x", *$headp);
+
+     $headp = (uint8 *)($iphdr + 5);
+     printf("%02x ", *$headp);
+
+     $headp = (uint8 *)($iphdr + 6);
+     printf("%02x", *$headp);
+
+     $headp = (uint8 *)($iphdr + 7);
+     printf("%02x ", *$headp);
+
+     $headp = (uint8 *)($iphdr + 8);
+     printf("%02x", *$headp);
+
+     $headp = (uint8 *)($iphdr + 9);
+     printf("%02x ", *$headp);
+
+     $headp = (uint8 *)($iphdr + 10);
+     printf("%02x", *$headp);
+
+     $headp = (uint8 *)($iphdr + 11);
+     printf("%02x ", *$headp);
+
+     $headp = (uint8 *)($iphdr + 12);
+     printf("%02x", *$headp);
+
+     $headp = (uint8 *)($iphdr + 13);
+     printf("%02x ", *$headp);
+
+     $headp = (uint8 *)($iphdr + 14);
+     printf("%02x", *$headp);
+
+     $headp = (uint8 *)($iphdr + 15);
+     printf("%02x ", *$headp);
+
+     $headp = (uint8 *)($iphdr + 16);
+     printf("%02x", *$headp);
+
+     $headp = (uint8 *)($iphdr + 17);
+     printf("%02x ", *$headp);
+
+     $headp = (uint8 *)($iphdr + 18);
+     printf("%02x", *$headp);
+
+     $headp = (uint8 *)($iphdr + 19);
+     printf("%02x ", *$headp);
+
+     $headp = (uint8 *)($iphdr + 20);
+     printf("%02x", *$headp);
+
+     $headp = (uint8 *)($iphdr + 21);
+     printf("%02x ", *$headp);
+
+     $headp = (uint8 *)($iphdr + 22);
+     printf("%02x", *$headp);
+
+     $headp = (uint8 *)($iphdr + 23);
+     printf("%02x ", *$headp);
+
+     $headp = (uint8 *)($iphdr + 24);
+     printf("%02x", *$headp);
+
+     $headp = (uint8 *)($iphdr + 25);
+     printf("%02x ", *$headp);
+
+     $headp = (uint8 *)($iphdr + 26);
+     printf("%02x", *$headp);
+
+     $headp = (uint8 *)($iphdr + 27);
+     printf("%02x ", *$headp);
+
+     printf("\n");
+     printf("payload: ");
+     print(buf($data, 64));
+     */
+     printf("ip id = %x, header len = %x, ip total len = %x, [%d] %d\t%s > %s\n", $ipheader->id, $ipheader->ihl, $ipheader->tot_len,  $version, $ipheader->protocol, ntop($ipheader->saddr), ntop($ipheader->daddr));
+     printf("trans len = %x\tsource: %x > dest: %x\n", $transheader->len, $transheader->source, $transheader->dest);
+  }
+}
+
+kprobe:ip_rcv
+{
+  @ip_rcv[tid] = 1;
+
+  $skb = (struct sk_buff *)arg0;
+  $ipheader = (struct iphdr *)($skb->head + $skb->network_header);
+  $version = $ipheader->version;
+  if ($ipheader->protocol == 248) {
+     printf("ip_rcv id = %x, header len = %x, ip total len = %x, [%d] %d\t%s > %s\n", $ipheader->id, $ipheader->ihl, $ipheader->tot_len, $version, $ipheader->protocol, ntop($ipheader->saddr), ntop($ipheader->daddr));
+  }
+}
+
+kretprobe:ip_rcv
+{
+   @ip_rcv[tid] = 0;
+}
+kprobe:netdev_rx_csum_fault
+{
+   @csum_fault_count = count();
+}
+END
+{
+  clear(@ip_rcv);
+}
+
