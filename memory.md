@@ -1075,7 +1075,7 @@ do_page_fault()--->__do_fault()--->ext4_filemap_fault()--->filemap_fault()--->ad
 1431 >-------return page;
 1432 }
 ```
-## 共享内存到底算page cache还是anon memory，共享内存(share memory)对memcg如何计数
+## 16) 共享内存到底算page cache还是anon memory，共享内存(share memory)对memcg如何计数
 ```
 基本结论：共享内存算anon memory，所有非SwapBacked的page都是file cache。反之就是annon page
 1611 /*
@@ -1800,7 +1800,7 @@ do_page_fault()--->__do_fault()--->ext4_filemap_fault()--->filemap_fault()--->ad
  
  ```
 
-##容器SHMEM和Cached，USED关系
+## 17) 容器SHMEM和Cached，USED关系
 ```
 set10是个容器，容器规格为360G内存
 [root@set10 /]# free -h
@@ -1812,5 +1812,39 @@ Swap:            0B          0B          0B
 容器SHMEM大小 = buff/cache - available = 269G -258G = 11G. 这11G才是真正算在该容器上的内存
 total = used + free + buff/cache = 85 + 5.4 + 269 = 360
 
+```
+
+## 18) 容器内存使用还没到达使用上限，为什么会被回收内存？
+### case 1: memcg的祖先memcg到达内存上限了，祖先memcg会试图回收后代memcg内存，虽然后代memcg内存使用比较少。
+```
+static int try_charge(struct mem_cgroup *memcg, gfp_t gfp_mask,
+>------->-------      unsigned int nr_pages)
+{
+...
+
+>-------if (mem_cgroup_is_root(memcg))
+>------->-------return 0;
+retry:
+>-------if (consume_stock(memcg, nr_pages))
+>------->-------return 0;
+
+>-------if (!do_memsw_account() ||
+>-------    page_counter_try_charge(&memcg->memsw, batch, &counter)) {
+>------->-------if (page_counter_try_charge(&memcg->memory, batch, &counter))
+>------->------->-------goto done_restock;
+>------->-------if (do_memsw_account())
+>------->------->-------page_counter_uncharge(&memcg->memsw, batch);
+>------->-------mem_over_limit = mem_cgroup_from_counter(counter, memory); //从当前容器一直查找祖先容器，直到找到内存超限容器
+>-------} else {
+>------->-------mem_over_limit = mem_cgroup_from_counter(counter, memsw); //
+>------->-------may_swap = false;
+>-------}
+
+...
+>-------nr_reclaimed = try_to_free_mem_cgroup_pages(mem_over_limit, nr_pages,
+>------->------->------->------->------->-------    gfp_mask, may_swap); // 从找到的祖先容器回收内存，可能会回收到后代容器，虽然后代容器内存没有超限
+
+...
+}
 ```
  
