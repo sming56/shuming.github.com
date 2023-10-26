@@ -1,0 +1,17 @@
+#!/usr/bin/env bpftrace
+#include <linux/mm_types.h>
+#include <linux/memcontrol.h>
+#include <linux/cgroup-defs.h>
+#include <linux/kernfs.h>
+kprobe:add_to_swap
+{
+  $page = (struct page *)arg0;
+  $memcg = (struct mem_cgroup *)($page->mem_cgroup);
+  $memcg_id = $memcg->id.id;
+  $cgroup = (struct cgroup *)($memcg->css.cgroup);
+  $kn = (struct kernfs_node *)($cgroup->kn);
+  $name = $kn->name;
+  printf("memcg_id = %d, kn_name = %s \n", $memcg_id, str($name));
+  print(kstack);
+}
+
