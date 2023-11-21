@@ -1,0 +1,4 @@
+用超级权限hack容器参数
+docker exec --privileged  -ti 1d6ac9d34e67 bash
+mount -oremount,rw /proc/sys
+sysctl -w net.ipv4.tcp_congestion_control=bbr
