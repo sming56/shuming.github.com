@@ -1,0 +1,5 @@
+#/dev/shm的大小默认是64MB,可以这样调整
+```
+ docker exec --privileged  -ti <容器ID> bash
+ mount -oremount,rw,nosuid,nodev,noexec,relatime,size=1048576k /dev/shm
+```
