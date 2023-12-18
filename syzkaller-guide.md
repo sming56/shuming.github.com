@@ -146,6 +146,9 @@ https://android.googlesource.com/platform/external/syzkaller/+/HEAD/docs/reprodu
  /usr/local/bin/qemu-system-x86_64 -m 4096 -smp 4 -chardev socket,id=SOCKSYZ,server=on,wait=off,host=localhost,port=59425 -mon chardev=SOCKSYZ,mode=control -display none -serial stdio -no-reboot -name VM-6 -device virtio-rng-pci -enable-kvm -cpu host,migratable=off -device e1000,netdev=net0 -netdev user,id=net0,restrict=on,hostfwd=tcp:127.0.0.1:60149-:22 -hda /opt/images/bi-image/bullseye.img -snapshot -kernel /opt/shuming02/arch/x86/boot/bzImage -append "root=/dev/sda console=ttyS0 net.ifnames=0"
  // 注意  -append 后的双引号一定要
  // 如果需要每次运行的结果都持久化入镜像文件，请去掉-snapshot参数，改成”-hda /opt/images/bi-image/bullseye.img -snapshot“
+//如果需要加-damonize参数，则需要去掉-serial stdio参数，会丢失serial console
+  /usr/local/bin/qemu-system-x86_64 -m 4096 -smp 4 -chardev socket,id=SOCKSYZ,server=on,wait=off,host=localhost,port=59425 -mon chardev=SOCKSYZ,mode=control -display none -no-reboot -name VM-6 -device virtio-rng-pci -enable-kvm -cpu host,migratable=off -device e1000,netdev=net0 -netdev user,id=net0,restrict=on,hostfwd=tcp:127.0.0.1:60149-:22 -hda /opt/images/bi-image/bullseye.img -snapshot -kernel /opt/shuming02/arch/x86/boot/bzImage -append "root=/dev/sda console=ttyS0 net.ifnames=0" -daemonize
+ 
  
 
 ```
