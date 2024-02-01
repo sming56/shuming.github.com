@@ -158,6 +158,7 @@ https://blog.csdn.net/21cnbao/article/details/112455742
 * 可以用来保护容器内存
 
 ## 9) 容器swap大小为什么可以突破2G限制
+目前容器memcg通过memory.memsw.limit_in_bytes =  memory.limit_in_bytes + 2G 来设定容器的swap为2G， 总限定了容器内存上限总量（包括swap)，比如规格32G容器加上2G swap就是34G。但是在某些情况下，比如anon page达到32G时，容器启动内存回收，没有page cache回收，只能回收匿名页导致swap，并且容器中的进程还一直在吃内存会申请更多的匿名页，所以回收的内存又被占满了，然后再回收，这样swap占用会越来越大，甚至超过2G。
 ## 10) 全局内存回收随机选择容器anon page  swap out
 ## 11) Anon Page Fault页是先放入inactive list还是active list？File Page cache是先放入inactive list还是active list?
 代码块
