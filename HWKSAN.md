@@ -14,3 +14,4 @@ key's collision
 Because there the key value only have four bits, there is 1/16 possibility that two different pointers collide on the key. For example, a pointer p1 is 0xfdffffff8000000, the key is 'd' and the real
 address is 0xffffff8000000. Then p1 is freed and another pointer p2 is allocated with 0xffffff8000000, and the key is also 'd'. Then there is no way to detect memory corruption when freed p1 is accessed.
 ```
+## no MTE support in x86 yet
