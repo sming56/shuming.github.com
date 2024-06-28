@@ -12,13 +12,13 @@
 ```
 1) 修改内核(/etc/default/grub)启动参数隔离一个CPU 3给RTOS
 rcu_nocbs=3 nohz_full=3 isolcpus=3 irqaffinity=0-2 audit=0 watchdog=0 skew_tick=1
-2) 打开iommu, 为pci设别passthrough给rtos作准备
+2) 打开iommu, 为pci设备passthrough给rtos作准备
 intel_iommu=on iommu=pt
 3) 执行update-grub2后重启host os
 ```
 
 ## 从host os选一个设备passthrough给rtos
-### 选定一个设备intel-lpss
+### 假设选定一个设备intel-lpss
 ```
 lspci -vnn
 
@@ -45,14 +45,22 @@ test@kvm-server:~/vms$ sudo modprobe vfio-pci
 
 root@kvm-server:~# echo '0000:00:15.0' > /sys/bus/pci/drivers/intel-lpss/unbind 
 ```
-### 设备加入到vfio-pci
+### 设备绑到vfio-pci
 echo '0000:00:15.0' > /sys/bus/pci/drivers/vfio-pci/bind
 
 ## 启动kvm 虚拟机并把设备透传给它
+```
 root@kvm-server:/home/test/vms# mkdir -p /etc/qemu/bridge.conf //这部是绕过安全检查, 见文件内容
+est@kvm-server:~$ cat /etc/qemu/bridge.conf
+allow virbr0
+allow all
+test@kvm-server:~
+
 root@kvm-server:/home/test/vms# cat ./vm.sh
+
 taskset -c 3 qemu-system-x86_64 -smp 1 -m 4096 -enable-kvm ubuntu.img  -netdev bridge,id=ming-u1,br=virbr0 -device virtio-net-pci,netdev=ming-u1,id=virtio-net1 -vnc :1 -device vfio-pci,host=00:15.0 -daemonize
-est@kvm-server:~/vms$ sudo ./vm.sh 
+
+test@kvm-server:~/vms$ sudo ./vm.sh 
 [sudo] password for test: 
 qemu-system-x86_64: warning: host doesn't support requested feature: CPUID.80000001H:ECX.svm [bit 2]
 qemu-system-x86_64: vfio: Cannot reset device 0000:00:15.0, no available reset mechanism.
@@ -67,7 +75,7 @@ test@kvm-guest:~$ lspci // rtos中可以看到passthrough 设备
 00:03.0 Ethernet controller: Red Hat, Inc. Virtio network device
 00:04.0 Serial bus controller: Intel Corporation Cannon Point-LP Serial IO I2C Controller #0 (rev 30) <---passthrough
 test@kvm-guest:~$ 
-
+```
 ## rtos和gpos通讯
 ```
 建议就用network socket，因为是本机基于virti-net的网络驱动，性能很强。
