@@ -7,6 +7,7 @@ RFS通过两张表来防止用户态进程迁移后，原CPU backlog队列堆积
 ```
 ```
 第二张表rps_dev_flow_table 这张表用来存储网卡硬件所属得收队列。这张表每项填有cpu index和硬件往对应cpu backlog所收网络包个数，这张表也可以认为是内核记录所收收同流最后一个网络包backlog的CPU index。
+1)每个rxqueue对应一张rps_flow_table
 ```
 ```
 正常情况下同一条流在两张表上对应的CPU index是一致得，这有利网络性能。但是当用户态进程被迁移之后，两边得CPU就不等了。当内核调用get_rps_cpu()函数决定是否更新当前CPU时会做如下判断
