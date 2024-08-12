@@ -60,6 +60,7 @@ root@kvm-server:/home/test/vms# cat ./vm.sh
 
 taskset -c 3 qemu-system-x86_64 -smp 1 -m 4096 -enable-kvm ubuntu.img  -netdev bridge,id=ming-u1,br=virbr0 -device virtio-net-pci,netdev=ming-u1,id=virtio-net1 -vnc :1 -device vfio-pci,host=00:15.0 -daemonize
 //注意这里是且借用了libvirtd创建的virtbr0 bridge
+//qemu会为guest os拉起一个vnc server， qemu参数 -vnc :1对应的是vnc 端口号 5901 ，所以用vnc客户端连接“主机IP + 5901端口”就可以看到guest os的console输出
 test@kvm-server:~/vms$ sudo ./vm.sh 
 [sudo] password for test: 
 qemu-system-x86_64: warning: host doesn't support requested feature: CPUID.80000001H:ECX.svm [bit 2]
