@@ -50,7 +50,7 @@ echo '0000:00:15.0' > /sys/bus/pci/drivers/vfio-pci/bind
 
 ## 启动kvm 虚拟机并把设备透传给它
 ```
-root@kvm-server:/home/test/vms# mkdir -p /etc/qemu/bridge.conf //这部是绕过安全检查, 见文件内容
+root@kvm-server:/home/test/vms# mkdir -p /etc/qemu/bridge.conf //这步是绕过安全检查, 见文件内容
 est@kvm-server:~$ cat /etc/qemu/bridge.conf
 allow virbr0
 allow all
